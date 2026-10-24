@@ -185,7 +185,9 @@ TodayView buildToday(const Queries &q, qint64 now, const QTimeZone &zone, int re
             return a.task.dueDate.isValid();
         if (a.task.dueDate != b.task.dueDate)
             return a.task.dueDate < b.task.dueDate;
-        return a.task.createdAt < b.task.createdAt;
+        if (a.task.createdAt != b.task.createdAt)
+            return a.task.createdAt < b.task.createdAt;
+        return a.task.id < b.task.id; // stable between refreshes
     });
     view.readyTotal = ready.size();
     view.ready = ready.mid(0, readyLimit);

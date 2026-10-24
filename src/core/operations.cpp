@@ -611,6 +611,126 @@ Mutation setSetting(const QString &key, const QJsonValue &value)
     return m;
 }
 
+std::optional<Mutation> saveEvent(const Event &e, bool isNew, const QString &timezone, qint64 now, QString *error)
+{
+    if (e.title.trimmed().isEmpty()) {
+        setError(error, QStringLiteral("an event needs a title"));
+        return std::nullopt;
+    }
+    if (e.allDay ? (!e.startDate.isValid() || !e.endDate.isValid() || e.endDate < e.startDate) : (e.endAt < e.startAt)) {
+        setError(error, QStringLiteral("an event can't end before it starts"));
+        return std::nullopt;
+    }
+    QJsonArray tags;
+    for (const QString &t : e.blocking.allowedTags) {
+        if (!t.trimmed().isEmpty())
+            tags.append(t.trimmed());
+    }
+    const QVariantList values{
+        e.title.trimmed(),
+        optString(e.description),
+        e.allDay ? 1 : 0,
+        e.allDay ? QVariant(e.startDate.toString(Qt::ISODate)) : QVariant(),
+        e.allDay ? QVariant(e.endDate.toString(Qt::ISODate)) : QVariant(),
+        e.allDay ? QVariant() : QVariant(e.startAt),
+        e.allDay ? QVariant() : QVariant(e.endAt),
+        optString(timezone),
+        nameOf(e.blocking.mode),
+        jsonText(tags),
+        e.color.isEmpty() ? QStringLiteral("#6366f1") : e.color,
+        optString(e.location),
+    };
+
+    Mutation m;
+    m.text = isNew ? QStringLiteral("Add event “%1”").arg(e.title) : QStringLiteral("Edit event “%1”").arg(e.title);
+    m.scopes = {{QStringLiteral("events"), QStringLiteral("id = ?"), {e.id}}};
+    const QString id = e.id;
+    m.apply = [id, values, isNew, now](QSqlDatabase db, QString *error) {
+        QVariantList binds = values;
+        if (isNew) {
+            binds.prepend(id);
+            binds << now << now;
+            return exec(db,
+                        QStringLiteral("INSERT INTO events (id, title, description, is_all_day, start_date, end_date, start_at, "
+                                       "end_at, timezone, blocking_mode, allowed_tags, color, location, created_at, updated_at) "
+                                       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
+                        binds, error);
+        }
+        binds << now << id;
+        return exec(db,
+                    QStringLiteral("UPDATE events SET title = ?, description = ?, is_all_day = ?, start_date = ?, end_date = ?, "
+                                   "start_at = ?, end_at = ?, timezone = ?, blocking_mode = ?, allowed_tags = ?, color = ?, "
+                                   "location = ?, updated_at = ? WHERE id = ?"),
+                    binds, error);
+    };
+    return m;
+}
+
+Mutation deleteEvent(const QString &id)
+{
+    Mutation m;
+    m.text = QStringLiteral("Delete event");
+    m.scopes = {
+        {QStringLiteral("events"), QStringLiteral("id = ?"), {id}},
+        {QStringLiteral("synced_events"), QStringLiteral("event_id = ?"), {id}},
+    };
+    m.apply = [id](QSqlDatabase db, QString *error) {
+        return exec(db, QStringLiteral("DELETE FROM events WHERE id = ?"), {id}, error);
+    };
+    return m;
+}
+
+std::optional<Mutation> logEnergy(const QString &id, int level, qint64 at, const QString &notes, QString *error)
+{
+    if (level < 1 || level > 10) {
+        setError(error, QStringLiteral("energy is 1 to 10"));
+        return std::nullopt;
+    }
+    Mutation m;
+    m.text = QStringLiteral("Energy check-in");
+    m.scopes = {{QStringLiteral("energy_logs"), QStringLiteral("id = ?"), {id}}};
+    m.apply = [=](QSqlDatabase db, QString *error) {
+        return exec(db, QStringLiteral("INSERT INTO energy_logs (id, logged_at, energy_level, notes) VALUES (?, ?, ?, ?)"),
+                    {id, at, level, optString(notes)}, error);
+    };
+    return m;
+}
+
+std::optional<Mutation> saveHealth(const Queries &q, const HealthLog &log, qint64 now, QString *error)
+{
+    if (!log.date.isValid()) {
+        setError(error, QStringLiteral("a health log needs a date"));
+        return std::nullopt;
+    }
+    const auto inRange = [](const std::optional<int> &v) { return !v || (*v >= 0 && *v <= 100); };
+    if (!inRange(log.sleepScore) || !inRange(log.readinessScore)) {
+        setError(error, QStringLiteral("scores are 0 to 100"));
+        return std::nullopt;
+    }
+    const auto existing = q.healthLog(log.date);
+    const QString id = existing ? existing->id : (log.id.isEmpty() ? newId() : log.id);
+    const QString date = log.date.toString(Qt::ISODate);
+    const auto opt = [](const auto &v) { return v ? QVariant(*v) : QVariant(); };
+    const QVariantList values{opt(log.sleepScore), opt(log.readinessScore), opt(log.hoursSlept), optString(log.notes)};
+
+    Mutation m;
+    m.text = QStringLiteral("Health check-in");
+    m.scopes = {{QStringLiteral("health_logs"), QStringLiteral("log_date = ?"), {date}}};
+    m.apply = [id, date, values, now](QSqlDatabase db, QString *error) {
+        QVariantList binds{id, date};
+        binds += values;
+        binds << now << now;
+        return exec(db,
+                    QStringLiteral("INSERT INTO health_logs (id, log_date, sleep_score, readiness_score, hours_slept, notes, "
+                                   "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+                                   "ON CONFLICT(log_date) DO UPDATE SET sleep_score = excluded.sleep_score, "
+                                   "readiness_score = excluded.readiness_score, hours_slept = excluded.hours_slept, "
+                                   "notes = excluded.notes, updated_at = excluded.updated_at"),
+                    binds, error);
+    };
+    return m;
+}
+
 } // namespace ops
 
 int materializeOccurrences(QSqlDatabase db, const QList<Task> &tasks, QDate from, QDate to, qint64 now)

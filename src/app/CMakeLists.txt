@@ -1,6 +1,7 @@
 qt_add_executable(task-tumbler
     main.cpp
-    appcontroller.h appcontroller.cpp
+    appcontroller.h appcontroller.cpp appcontroller_ai.cpp
+    keystore.h keystore.cpp
     tasklistmodel.h tasklistmodel.cpp
     variants.h variants.cpp
     desktop/reminders.h desktop/reminders.cpp
@@ -24,6 +25,8 @@ qt_add_qml_module(task-tumbler
         qml/pages/CategoriesPage.qml
         qml/pages/SettingsPage.qml
         qml/pages/OnboardingPage.qml
+        qml/pages/PlanPage.qml
+        qml/pages/EnergyPage.qml
         qml/components/Chip.qml
         qml/components/SectionTitle.qml
         qml/components/AgendaRow.qml
@@ -31,6 +34,8 @@ qt_add_qml_module(task-tumbler
         qml/components/ReadyCard.qml
         qml/components/TaskRow.qml
         qml/components/CategoryDialog.qml
+        qml/components/EventDialog.qml
+        qml/components/EnergyCheckIn.qml
         qml/components/Format.qml
 )
 
@@ -43,6 +48,8 @@ qt_add_resources(task-tumbler "icons"
 target_include_directories(task-tumbler PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(task-tumbler PRIVATE
     tumbler-core
+    tumbler-ai
+    Qt6Keychain::Qt6Keychain
     Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::DBus
     KF6::CoreAddons KF6::I18n KF6::I18nQml KF6::DBusAddons KF6::Notifications KF6::StatusNotifierItem KF6::GlobalAccel
 )

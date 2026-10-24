@@ -23,10 +23,21 @@ Kirigami.ApplicationWindow {
             schedule: schedulePage,
             categories: categoriesPage,
             settings: settingsPage,
-            onboarding: onboardingPage
+            onboarding: onboardingPage,
+            energy: energyPage
+        }
+        if (name === "plan") {
+            showPage("today")
+            openPlan()
+            return
         }
         if (name === "capture") {
             openCapture()
+            return
+        }
+        if (name.startsWith("event:")) {
+            showPage("schedule")
+            editEvent(name === "event:new" ? "" : name.slice(6))
             return
         }
         if (name.startsWith("task:")) {
@@ -52,6 +63,19 @@ Kirigami.ApplicationWindow {
 
     function openCapture() {
         captureWindow.openCapture()
+    }
+
+    // A layer, not a column: it's a short side trip that covers the page
+    // it came from, and pops back when done.
+    function openPlan() {
+        if (pageStack.layers.depth > 1)
+            return
+        pageStack.layers.push(planPage)
+    }
+
+    // An existing event by id, or a new one starting at `start` (ms).
+    function editEvent(id, start) {
+        eventDialog.edit(id, start)
     }
 
     globalDrawer: Kirigami.GlobalDrawer {
@@ -85,6 +109,13 @@ Kirigami.ApplicationWindow {
                 onTriggered: root.showPage("schedule")
             },
             Kirigami.Action {
+                text: i18n("Energy")
+                icon.name: "battery-060"
+                checked: root.currentPage === "energy"
+                shortcut: "Ctrl+5"
+                onTriggered: root.showPage("energy")
+            },
+            Kirigami.Action {
                 text: i18n("Categories")
                 icon.name: "tag"
                 checked: root.currentPage === "categories"
@@ -92,6 +123,12 @@ Kirigami.ApplicationWindow {
                 onTriggered: root.showPage("categories")
             },
             Kirigami.Action { separator: true },
+            Kirigami.Action {
+                text: i18n("Plan My Day")
+                icon.name: "view-calendar-week"
+                shortcut: "Ctrl+P"
+                onTriggered: root.openPlan()
+            },
             Kirigami.Action {
                 text: i18n("Quick Capture")
                 icon.name: "list-add"
@@ -145,7 +182,7 @@ Kirigami.ApplicationWindow {
         onActivated: root.openCapture()
     }
     Shortcut {
-        sequence: StandardKey.Undo
+        sequences: [StandardKey.Undo]
         onActivated: AppController.undo()
     }
     Shortcut {
@@ -162,6 +199,10 @@ Kirigami.ApplicationWindow {
 
     QuickCaptureWindow {
         id: captureWindow
+    }
+
+    EventDialog {
+        id: eventDialog
     }
 
     Component {
@@ -187,6 +228,14 @@ Kirigami.ApplicationWindow {
     Component {
         id: onboardingPage
         OnboardingPage {}
+    }
+    Component {
+        id: planPage
+        PlanPage {}
+    }
+    Component {
+        id: energyPage
+        EnergyPage {}
     }
     Component {
         id: taskDetailPage

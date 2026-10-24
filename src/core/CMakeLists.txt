@@ -17,6 +17,7 @@ qt_add_library(tumbler-core STATIC
     today.h today.cpp
     captureparser.h captureparser.cpp
     reminderplan.h reminderplan.cpp
+    dayplanner.h dayplanner.cpp
 )
 
 qt_add_resources(tumbler-core "migrations"

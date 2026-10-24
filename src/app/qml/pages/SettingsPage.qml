@@ -14,6 +14,89 @@ FormCard.FormCardPage {
 
     title: i18n("Settings")
 
+    FormCard.FormHeader { title: i18n("AI") }
+    FormCard.FormCard {
+        id: aiCard
+        readonly property var a: AppController.ai
+
+        FormCard.FormComboBoxDelegate {
+            text: i18n("Use")
+            description: i18n("Everything works without AI. With it, plans and steps get smarter.")
+            model: [
+                { value: "off", text: i18n("No AI") },
+                { value: "anthropic", text: i18n("Claude (Anthropic API key)") },
+                { value: "ollama", text: i18n("A local model (Ollama)") }
+            ]
+            textRole: "text"
+            valueRole: "value"
+            currentIndex: Math.max(0, model.findIndex(m => m.value === aiCard.a.provider))
+            onActivated: {
+                AppController.setSetting("ai_provider", currentValue)
+                if (currentValue === "ollama")
+                    AppController.refreshOllamaModels()
+            }
+        }
+
+        // Claude
+        FormCard.FormDelegateSeparator { visible: aiCard.a.provider === "anthropic" }
+        FormCard.FormPasswordFieldDelegate {
+            id: keyField
+            visible: aiCard.a.provider === "anthropic"
+            label: aiCard.a.hasKey ? i18n("API key (saved in your keyring; type to replace)") : i18n("API key")
+            placeholderText: "sk-ant-…"
+            onAccepted: { AppController.setApiKey(text); text = "" }
+        }
+        FormCard.FormButtonDelegate {
+            visible: aiCard.a.provider === "anthropic" && keyField.text !== ""
+            text: i18n("Save key")
+            icon.name: "document-save"
+            onClicked: { AppController.setApiKey(keyField.text); keyField.text = "" }
+        }
+        FormCard.FormTextFieldDelegate {
+            visible: aiCard.a.provider === "anthropic"
+            label: i18n("Model")
+            text: aiCard.a.model
+            onEditingFinished: if (text.trim() && text !== aiCard.a.model) AppController.setSetting("ai_model", text.trim())
+        }
+        FormCard.FormSwitchDelegate {
+            visible: aiCard.a.provider === "anthropic"
+            text: i18n("Include task notes")
+            description: i18n("Off: only titles, times and priorities leave this computer")
+            checked: aiCard.a.shareNotes
+            onToggled: AppController.setSetting("ai_share_notes", checked)
+        }
+
+        // Ollama
+        FormCard.FormDelegateSeparator { visible: aiCard.a.provider === "ollama" }
+        FormCard.FormTextFieldDelegate {
+            visible: aiCard.a.provider === "ollama"
+            label: i18n("Ollama address")
+            text: aiCard.a.ollamaUrl
+            onEditingFinished: if (text.trim() && text !== aiCard.a.ollamaUrl) {
+                AppController.setSetting("ollama_url", text.trim())
+                AppController.refreshOllamaModels()
+            }
+        }
+        FormCard.FormComboBoxDelegate {
+            visible: aiCard.a.provider === "ollama"
+            text: i18n("Model")
+            description: AppController.ollamaModels.length === 0 ? i18n("No models found yet; is Ollama running?") : ""
+            model: AppController.ollamaModels
+            currentIndex: AppController.ollamaModels.indexOf(aiCard.a.ollamaModel)
+            onActivated: AppController.setSetting("ollama_model", currentText)
+            Component.onCompleted: if (aiCard.a.provider === "ollama") AppController.refreshOllamaModels()
+        }
+
+        FormCard.FormDelegateSeparator { visible: aiCard.a.provider !== "off" }
+        FormCard.FormButtonDelegate {
+            visible: aiCard.a.provider !== "off"
+            enabled: aiCard.a.ready && !aiCard.a.busy
+            icon.name: "network-connect"
+            text: aiCard.a.busy ? i18n("Checking…") : i18n("Test connection")
+            onClicked: AppController.testAi()
+        }
+    }
+
     FormCard.FormHeader { title: i18n("Reminders") }
     FormCard.FormCard {
         FormCard.FormSwitchDelegate {
@@ -71,9 +154,19 @@ FormCard.FormCardPage {
             onEditingFinished: if (acceptableInput && text !== page.s.peakEnergyEnd) AppController.setSetting("peak_energy_end", text)
         }
         FormCard.FormDelegateSeparator {}
+        FormCard.FormDelegateSeparator {}
+        FormCard.FormSpinBoxDelegate {
+            label: i18n("Break after each planned block (minutes)")
+            from: 0
+            to: 60
+            stepSize: 5
+            value: page.s.breakMinutes
+            onValueModified: AppController.setSetting("break_duration_minutes", value)
+        }
+        FormCard.FormDelegateSeparator {}
         FormCard.FormTextAreaDelegate {
-            label: i18n("Notes for the AI scheduler")
-            description: i18n("Used once AI scheduling arrives")
+            label: i18n("Notes for the AI planner")
+            description: i18n("Anything that helps it plan for you, e.g. \"admin goes after lunch\"")
             text: page.s.aiHints
             onEditingFinished: if (text !== page.s.aiHints) AppController.setSetting("ai_scheduling_hints", text)
         }

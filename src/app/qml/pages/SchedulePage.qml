@@ -64,6 +64,21 @@ Kirigami.Page {
 
     actions: [
         Kirigami.Action {
+            text: i18n("Add event")
+            icon.name: "appointment-new"
+            onTriggered: {
+                // The next whole hour today; 09:00 on other days.
+                const start = new Date(page.day)
+                if (page.agenda.isToday) {
+                    const now = new Date()
+                    start.setHours(now.getHours() + 1, 0, 0, 0)
+                } else {
+                    start.setHours(9, 0, 0, 0)
+                }
+                applicationWindow().editEvent("", start.getTime())
+            }
+        },
+        Kirigami.Action {
             icon.name: "go-previous"
             text: i18n("Previous day")
             displayHint: Kirigami.DisplayHint.IconOnly
@@ -101,6 +116,7 @@ Kirigami.Page {
                     iconName: "view-calendar"
                     tint: modelData.color || Kirigami.Theme.highlightColor
                     strong: true
+                    TapHandler { onTapped: applicationWindow().editEvent(parent.modelData.id) }
                 }
             }
         }
@@ -253,7 +269,9 @@ Kirigami.Page {
                         TapHandler {
                             acceptedButtons: Qt.LeftButton | Qt.RightButton
                             onTapped: (point, button) => {
-                                if (block.modelData.kind !== "event")
+                                if (block.modelData.kind === "event")
+                                    applicationWindow().editEvent(block.modelData.id)
+                                else
                                     blockMenu.popup()
                             }
                         }

@@ -35,6 +35,14 @@ public:
     // local dates in that range.
     QList<Event> events(qint64 from, qint64 to, QDate firstDay, QDate lastDay) const;
 
+    std::optional<Event> event(const QString &id) const;
+
+    QList<EnergyLog> energyLogs(qint64 from, qint64 to) const;
+    // The most recent check-in at or after `since`, if any.
+    std::optional<EnergyLog> latestEnergy(qint64 since) const;
+    QList<HealthLog> healthLogs(QDate from, QDate to) const;
+    std::optional<HealthLog> healthLog(QDate date) const;
+
     std::optional<WorkLog> activeWorkLog() const;
     QList<WorkLog> workLogsForTask(const QString &taskId) const;
     // Minutes logged per task, finished sessions only.

@@ -83,6 +83,7 @@ struct WorkLog {
 struct Event {
     QString id;
     QString title;
+    QString description;
     bool allDay = false;
     QDate startDate; // all-day
     QDate endDate;
@@ -91,6 +92,22 @@ struct Event {
     EventBlockingRule blocking;
     QString color;
     QString location;
+};
+
+struct EnergyLog {
+    QString id;
+    qint64 loggedAt = 0;
+    int level = 5; // 1-10
+    QString notes;
+};
+
+struct HealthLog {
+    QString id;
+    QDate date;
+    std::optional<int> sleepScore;     // 0-100
+    std::optional<int> readinessScore; // 0-100
+    std::optional<double> hoursSlept;
+    QString notes;
 };
 
 struct Dependency {

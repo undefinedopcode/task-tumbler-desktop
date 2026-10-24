@@ -5,6 +5,7 @@
 #include "importer.h"
 #include "operations.h"
 #include "planner.h"
+#include "provider.h"
 #include "tasklistmodel.h"
 #include "today.h"
 #include "variants.h"
@@ -69,10 +70,11 @@ QString formatTime(qint64 ms, const QTimeZone &zone)
 
 } // namespace
 
-AppController::AppController(Database &db, QObject *parent)
+AppController::AppController(Database &db, QObject *parent, KeyStore *keys)
     : QObject(parent)
     , m_db(db)
     , m_tasks(new TaskListModel(this))
+    , m_keys(keys)
 {
     m_undo.setUndoLimit(200);
     connect(&m_undo, &QUndoStack::indexChanged, this, &AppController::undoStateChanged);
@@ -86,14 +88,17 @@ AppController::AppController(Database &db, QObject *parent)
         if (QDateTime::currentDateTime(zone()).date() != m_lastTodayDate)
             ensureOccurrences();
         refreshToday();
+        refreshEnergy();
     });
     m_tick.start();
 
     ensureOccurrences();
     refresh({QStringLiteral("tasks"), QStringLiteral("categories"), QStringLiteral("settings")});
+    refreshEnergy();
+    initAi();
 }
 
-AppController::~AppController() = default;
+AppController::~AppController() = default; // out of line: ai::Provider is incomplete in the header
 
 AppController *AppController::create(QQmlEngine *, QJSEngine *)
 {
@@ -219,6 +224,10 @@ void AppController::refresh(const QSet<QString> &tables)
         Q_EMIT settingsChanged();
         Q_EMIT onboardingChanged();
     }
+    if (tables.contains(QStringLiteral("energy_logs")) || tables.contains(QStringLiteral("settings")))
+        refreshEnergy();
+    if (tables.contains(QStringLiteral("settings")))
+        Q_EMIT aiChanged();
     QStringList list(tables.begin(), tables.end());
     Q_EMIT changed(list);
     refreshToday();
@@ -284,7 +293,16 @@ QString AppController::resolveCategory(const QString &name) const
 
 QVariantMap AppController::previewCapture(const QString &text) const
 {
-    const CaptureResult r = parseCapture(text, QDateTime::currentDateTime(zone()).date());
+    if (!m_aiCaptureText.isEmpty() && text == m_aiCaptureText) {
+        QVariantMap m = previewOf(m_aiCaptureResult);
+        m.insert(QStringLiteral("fromAi"), true);
+        return m;
+    }
+    return previewOf(parseCapture(text, QDateTime::currentDateTime(zone()).date()));
+}
+
+QVariantMap AppController::previewOf(const CaptureResult &r) const
+{
     QVariantMap m{{QStringLiteral("title"), r.title}, {QStringLiteral("tags"), r.tags}};
     if (r.priority)
         m.insert(QStringLiteral("priority"), nameOf(*r.priority));
@@ -313,8 +331,18 @@ QVariantMap AppController::previewCapture(const QString &text) const
 
 QString AppController::capture(const QString &text)
 {
+    // Use the AI's reading when one was asked for on this exact text.
+    if (!m_aiCaptureText.isEmpty() && text == m_aiCaptureText) {
+        const CaptureResult r = m_aiCaptureResult;
+        m_aiCaptureText.clear();
+        return createFromCapture(r, text);
+    }
+    return createFromCapture(parseCapture(text, QDateTime::currentDateTime(zone()).date()), text);
+}
+
+QString AppController::createFromCapture(const CaptureResult &r, const QString &)
+{
     const QDate today = QDateTime::currentDateTime(zone()).date();
-    const CaptureResult r = parseCapture(text, today);
     if (r.title.isEmpty()) {
         Q_EMIT message(QStringLiteral("Type what needs doing first"));
         return {};

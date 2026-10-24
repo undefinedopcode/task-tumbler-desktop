@@ -11,10 +11,12 @@ Window {
     id: win
 
     property var preview: ({})
+    property bool asking: false
 
     function openCapture() {
         field.text = ""
         preview = {}
+        asking = false
         show()
         raise()
         requestActivate()
@@ -38,6 +40,21 @@ Window {
     Kirigami.Theme.inherit: false
 
     onActiveChanged: if (!active && visible && field.text === "") win.close()
+
+    Connections {
+        target: AppController
+        function onAiCaptureReady(text, preview) {
+            win.asking = false
+            if (text === field.text)
+                win.preview = preview
+        }
+        function onAiFailed(feature, error) {
+            if (feature === "capture") {
+                win.asking = false
+                win.preview = Object.assign({}, win.preview, { aiError: error })
+            }
+        }
+    }
 
     ColumnLayout {
         id: content
@@ -66,6 +83,14 @@ Window {
             onTextChanged: win.preview = text.trim() ? AppController.previewCapture(text) : ({})
             onAccepted: win.submit()
             Keys.onEscapePressed: win.close()
+            Keys.onPressed: event => {
+                if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.ControlModifier)
+                        && AppController.ai.ready && text.trim() !== "") {
+                    win.asking = true
+                    AppController.aiCapture(text)
+                    event.accepted = true
+                }
+            }
         }
 
         // What will be created, live, so nothing is surprising.
@@ -74,6 +99,13 @@ Window {
             spacing: Kirigami.Units.smallSpacing
             visible: win.preview.title !== undefined
 
+            Chip {
+                visible: !!win.preview.fromAi
+                text: i18n("Read by AI")
+                iconName: "tools-wizard"
+                tint: Kirigami.Theme.positiveTextColor
+                strong: true
+            }
             Chip {
                 text: win.preview.title || i18n("(no title yet)")
                 tint: Kirigami.Theme.highlightColor
@@ -114,8 +146,29 @@ Window {
             text: i18n("Optional: tomorrow · friday · at 3pm · ~30m · !high · +low (energy) · #tag · /category · every mon and thu · daily")
         }
 
+        Controls.Label {
+            visible: !!win.preview.aiError
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            color: Kirigami.Theme.negativeTextColor
+            text: i18n("AI couldn't read it: %1", win.preview.aiError || "")
+        }
+
         RowLayout {
             Layout.fillWidth: true
+            Controls.Button {
+                visible: AppController.ai.ready
+                enabled: field.text.trim() !== "" && !win.asking && !win.preview.fromAi
+                text: win.asking ? i18n("Asking…") : i18n("Ask AI")
+                icon.name: "tools-wizard"
+                onClicked: {
+                    win.asking = true
+                    AppController.aiCapture(field.text)
+                }
+                Controls.ToolTip.text: i18n("Let the AI read a messy note (Ctrl+Enter)")
+                Controls.ToolTip.visible: hovered
+                Controls.ToolTip.delay: Kirigami.Units.toolTipDelay
+            }
             Item { Layout.fillWidth: true }
             Controls.Button {
                 text: i18n("Cancel")

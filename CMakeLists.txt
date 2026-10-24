@@ -15,6 +15,7 @@ option(BUILD_TESTING "Build the test suite" ON)
 option(BUILD_APP "Build the desktop app (needs KDE Frameworks)" ON)
 
 add_subdirectory(src/core)
+add_subdirectory(src/ai)
 add_subdirectory(src/cli)
 
 if(BUILD_APP)
@@ -26,6 +27,7 @@ if(BUILD_APP)
     find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
         Kirigami CoreAddons I18n DBusAddons Notifications StatusNotifierItem GlobalAccel)
     find_package(KF6KirigamiAddons 1.0 REQUIRED)
+    find_package(Qt6Keychain REQUIRED)
 
     add_subdirectory(src/app)
 endif()

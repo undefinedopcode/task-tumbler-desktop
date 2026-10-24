@@ -12,6 +12,9 @@ FormCard.FormCardPage {
 
     required property string taskId
     property var detail: AppController.taskDetail(taskId)
+    property var proposedSteps: []
+    property string stepsExplanation: ""
+    property bool askingSteps: false
     readonly property bool finished: detail.status === "completed" || detail.status === "cancelled"
     readonly property bool isWorking: AppController.working.taskId === taskId
     readonly property var weekdays: [i18n("Sun"), i18n("Mon"), i18n("Tue"), i18n("Wed"), i18n("Thu"), i18n("Fri"), i18n("Sat")]
@@ -28,6 +31,17 @@ FormCard.FormCardPage {
 
     Connections {
         target: AppController
+        function onStepsReady(id, steps, explanation) {
+            if (id !== taskPage.taskId)
+                return
+            taskPage.askingSteps = false
+            taskPage.proposedSteps = steps
+            taskPage.stepsExplanation = explanation
+        }
+        function onAiFailed(feature) {
+            if (feature === "breakdown")
+                taskPage.askingSteps = false
+        }
         function onChanged() {
             const d = AppController.taskDetail(taskPage.taskId)
             if (d.id === undefined) {
@@ -273,6 +287,50 @@ FormCard.FormCardPage {
                     onClicked: taskPage.openTask(modelData.id)
                 }
             }
+        }
+        FormCard.FormButtonDelegate {
+            visible: AppController.ai.ready && taskPage.proposedSteps.length === 0 && !taskPage.finished
+            enabled: !taskPage.askingSteps
+            icon.name: "tools-wizard"
+            text: taskPage.askingSteps ? i18n("Asking %1…", AppController.ai.label) : i18n("Suggest steps")
+            description: i18n("Break it into small steps, the first one easy to start")
+            onClicked: {
+                taskPage.askingSteps = true
+                AppController.breakDown(taskPage.taskId)
+            }
+        }
+        FormCard.FormSectionText {
+            visible: taskPage.proposedSteps.length > 0
+            text: taskPage.stepsExplanation || i18n("Suggested steps. Untick any you don't want.")
+        }
+        Repeater {
+            model: taskPage.proposedSteps.length
+            FormCard.FormCheckDelegate {
+                required property int index
+                readonly property var step: taskPage.proposedSteps[index]
+                text: step.title
+                description: Format.minutes(step.minutes) + " · " + Format.energyLabel(step.energy)
+                checked: step.checked
+                onToggled: {
+                    const copy = taskPage.proposedSteps.slice()
+                    copy[index] = Object.assign({}, copy[index], { checked: checked })
+                    taskPage.proposedSteps = copy
+                }
+            }
+        }
+        FormCard.FormButtonDelegate {
+            visible: taskPage.proposedSteps.length > 0
+            icon.name: "list-add"
+            text: i18n("Add the ticked steps")
+            onClicked: {
+                if (AppController.addSteps(taskPage.taskId, taskPage.proposedSteps.filter(s => s.checked)))
+                    taskPage.proposedSteps = []
+            }
+        }
+        FormCard.FormButtonDelegate {
+            visible: taskPage.proposedSteps.length > 0
+            text: i18n("Discard suggestions")
+            onClicked: taskPage.proposedSteps = []
         }
         FormCard.FormTextFieldDelegate {
             id: newStep

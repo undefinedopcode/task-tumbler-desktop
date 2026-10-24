@@ -250,7 +250,9 @@ void TaskListModel::rebuild()
             return a.task.dueDate < b.task.dueDate;
         if (a.task.sortOrder != b.task.sortOrder)
             return a.task.sortOrder.value_or(INT_MAX) < b.task.sortOrder.value_or(INT_MAX);
-        return a.task.createdAt < b.task.createdAt;
+        if (a.task.createdAt != b.task.createdAt)
+            return a.task.createdAt < b.task.createdAt;
+        return a.task.id < b.task.id; // stable between refreshes
     });
 
     beginResetModel();

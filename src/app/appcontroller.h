@@ -1,10 +1,14 @@
 #pragma once
 
+#include "captureparser.h"
 #include "database.h"
+#include "dayplanner.h"
+#include "dayplanner.h"
 #include "mutation.h"
 #include "queries.h"
 #include "tasklistmodel.h"
 
+#include <QNetworkAccessManager>
 #include <QObject>
 #include <QQmlEngine>
 #include <QSet>
@@ -16,7 +20,11 @@
 
 namespace tumbler {
 
-
+namespace ai {
+class Provider;
+struct Result;
+}
+class KeyStore;
 
 // The one object QML talks to. Every write goes through apply(): a Mutation
 // from core/operations runs, lands on the undo stack, and `changed` tells
@@ -38,9 +46,16 @@ class AppController : public QObject
     Q_PROPERTY(bool needsOnboarding READ needsOnboarding NOTIFY onboardingChanged)
     Q_PROPERTY(QVariantMap settings READ settings NOTIFY settingsChanged)
     Q_PROPERTY(QString dataPath READ dataPath CONSTANT)
+    // {provider: "off"|"anthropic"|"ollama", ready, busy, label, hasKey, model, ollamaUrl, ollamaModel, shareNotes}
+    Q_PROPERTY(QVariantMap ai READ ai NOTIFY aiChanged)
+    // Latest check-in today: {level, at, label}; empty if none. `due` is set
+    // when it's been a while and a gentle prompt is appropriate.
+    Q_PROPERTY(QVariantMap energy READ energy NOTIFY energyChanged)
+    Q_PROPERTY(QStringList ollamaModels READ ollamaModels NOTIFY ollamaModelsChanged)
 
 public:
-    explicit AppController(Database &db, QObject *parent = nullptr);
+    // `keys` is the keyring; without one (tests) the API key lives in memory.
+    explicit AppController(Database &db, QObject *parent = nullptr, KeyStore *keys = nullptr);
     ~AppController() override;
 
     static AppController *create(QQmlEngine *, QJSEngine *);
@@ -57,6 +72,9 @@ public:
     bool needsOnboarding() const;
     QVariantMap settings() const { return m_settings; }
     QString dataPath() const { return m_db.path(); }
+    QVariantMap ai() const;
+    QVariantMap energy() const { return m_energy; }
+    QStringList ollamaModels() const { return m_ollamaModels; }
 
     QTimeZone zone() const;
     Queries queries() const { return Queries(m_db.handle()); }
@@ -108,6 +126,34 @@ public:
     Q_INVOKABLE QString backupNow();
     Q_INVOKABLE void openDataFolder() const;
 
+    // --- planning & AI (appcontroller_ai.cpp) --------------------------------
+    // Builds a plan for the day; answers with planReady. With useAi and a
+    // provider set up, the AI ranks and the offline planner times; if the AI
+    // fails the offline plan comes back with the reason.
+    Q_INVOKABLE void planDay(const QString &isoDate, bool useAi);
+    // Schedules the chosen blocks as one undoable step.
+    Q_INVOKABLE bool acceptPlan(const QVariantList &blocks, const QVariantMap &plan);
+    Q_INVOKABLE void dismissPlan(const QVariantMap &plan);
+    Q_INVOKABLE void breakDown(const QString &taskId);
+    Q_INVOKABLE bool addSteps(const QString &taskId, const QVariantList &steps);
+    // AI reading of a capture line; answers with aiCaptureReady. A following
+    // capture() of the same text uses it.
+    Q_INVOKABLE void aiCapture(const QString &text);
+
+    Q_INVOKABLE bool logEnergy(int level, const QString &notes = {});
+    Q_INVOKABLE bool saveHealth(const QVariantMap &log);
+    Q_INVOKABLE QVariantMap healthToday() const;
+    // {energy: [{at, level}], days: [{date, label, energy, sleep, readiness, hours}]}
+    Q_INVOKABLE QVariantMap energyHistory(int days) const;
+
+    Q_INVOKABLE QVariantMap eventDetail(const QString &id) const;
+    Q_INVOKABLE QString saveEvent(const QVariantMap &event);
+    Q_INVOKABLE bool deleteEvent(const QString &id);
+
+    Q_INVOKABLE void setApiKey(const QString &key);
+    Q_INVOKABLE void testAi();
+    Q_INVOKABLE void refreshOllamaModels();
+
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
 
@@ -135,12 +181,31 @@ Q_SIGNALS:
     void message(const QString &text);
     void showCaptureRequested();
     void showWindowRequested();
+    void planReady(const QVariantMap &plan);
+    void stepsReady(const QString &taskId, const QVariantList &steps, const QString &explanation);
+    void aiCaptureReady(const QString &text, const QVariantMap &preview);
+    void aiFailed(const QString &feature, const QString &error);
+    void aiChanged();
+    void energyChanged();
+    void ollamaModelsChanged();
 
 private:
     void refresh(const QSet<QString> &tables);
     void refreshToday();
     void ensureOccurrences();
     QString resolveCategory(const QString &name) const;
+    QString createFromCapture(const CaptureResult &r, const QString &source);
+    QVariantMap previewOf(const CaptureResult &r) const;
+    void refreshEnergy();
+    void initAi();
+
+    // AI plumbing (appcontroller_ai.cpp)
+    ai::Provider *provider();
+    void setAiBusy(bool busy);
+    QString logAi(const QString &feature, const ai::Result &result, const QString &prompt);
+    void setAiFeedback(const QString &logId, const QString &feedback);
+    PlanOptions planOptions(QDate day) const;
+    QVariantMap planToVariant(const DayPlan &plan, const QString &aiError, const ai::Result *result, const QString &logId) const;
     // The default category's id, creating "Default" (every day, 06:00-23:00)
     // if there is none yet. Not undoable: it's setup.
     QString ensureDefaultCategory();
@@ -157,6 +222,17 @@ private:
     QTimer m_tick;
     QDate m_occurrencesThrough;
     QDate m_lastTodayDate;
+
+    QNetworkAccessManager m_network;
+    KeyStore *m_keys;
+    QString m_apiKey;
+    bool m_aiBusy = false;
+    QStringList m_ollamaModels;
+    std::unique_ptr<ai::Provider> m_provider;
+    QString m_providerSignature;
+    QVariantMap m_energy;
+    QString m_aiCaptureText;
+    CaptureResult m_aiCaptureResult;
 };
 
 } // namespace tumbler

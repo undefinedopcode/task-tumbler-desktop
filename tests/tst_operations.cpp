@@ -285,6 +285,65 @@ private slots:
         QCOMPARE(q.task("a")->categoryId, QStringLiteral("def"));
     }
 
+    void eventsSaveEditDelete()
+    {
+        Queries q(db());
+        Event e;
+        e.id = "e1";
+        e.title = "Physio";
+        e.startAt = kNow;
+        e.endAt = kNow + 3600000;
+        e.blocking.mode = BlockingMode::TagsOnly;
+        e.blocking.allowedTags = {"phone", " "};
+        run(ops::saveEvent(e, true, "America/Vancouver", kNow));
+        QCOMPARE(q.event("e1")->blocking.allowedTags, QStringList({"phone"}));
+        QCOMPARE(scalar(db(), "SELECT timezone FROM events").toString(), QStringLiteral("America/Vancouver"));
+
+        e.allDay = true;
+        e.startDate = QDate(2026, 3, 5);
+        e.endDate = QDate(2026, 3, 6);
+        auto applied = run(ops::saveEvent(e, false, "America/Vancouver", kNow));
+        QVERIFY(q.event("e1")->allDay);
+        QVERIFY(scalar(db(), "SELECT start_at FROM events").isNull());
+        MutationRunner(db()).revert(applied);
+        QVERIFY(!q.event("e1")->allDay);
+
+        QString error;
+        e.endDate = QDate(2026, 3, 4);
+        QVERIFY(!ops::saveEvent(e, false, {}, kNow, &error));
+        e.title = " ";
+        QVERIFY(!ops::saveEvent(e, false, {}, kNow, &error));
+
+        run(ops::deleteEvent("e1"));
+        QVERIFY(!q.event("e1"));
+    }
+
+    void energyAndHealth()
+    {
+        Queries q(db());
+        QString error;
+        QVERIFY(!ops::logEnergy("x", 11, kNow, {}, &error));
+        run(ops::logEnergy("en1", 4, kNow - 7200000, "meh", nullptr));
+        run(ops::logEnergy("en2", 7, kNow - 3600000, {}, nullptr));
+        QCOMPARE(q.latestEnergy(kNow - 86400000)->level, 7);
+        QVERIFY(!q.latestEnergy(kNow));
+        QCOMPARE(q.energyLogs(kNow - 86400000, kNow).size(), 2);
+
+        HealthLog h;
+        h.date = QDate(2026, 3, 5);
+        h.sleepScore = 62;
+        h.hoursSlept = 6.5;
+        run(ops::saveHealth(q, h, kNow));
+        h.sleepScore = 70; // same day replaces
+        auto applied = run(ops::saveHealth(q, h, kNow));
+        QCOMPARE(q.healthLogs(QDate(2026, 3, 1), QDate(2026, 3, 31)).size(), 1);
+        QCOMPARE(*q.healthLog(QDate(2026, 3, 5))->sleepScore, 70);
+        MutationRunner(db()).revert(applied);
+        QCOMPARE(*q.healthLog(QDate(2026, 3, 5))->sleepScore, 62);
+        h.readinessScore = 101;
+        QVERIFY(!ops::saveHealth(q, h, kNow, &error));
+    }
+
     void settings()
     {
         Queries q(db());

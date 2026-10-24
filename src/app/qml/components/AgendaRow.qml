@@ -22,7 +22,7 @@ Controls.ItemDelegate {
 
     Layout.fillWidth: true
     hoverEnabled: true
-    onClicked: if (item.taskId) row.openTask(item.taskId)
+    onClicked: item.taskId ? row.openTask(item.taskId) : applicationWindow().editEvent(item.id)
 
     background: Rectangle {
         radius: Kirigami.Units.cornerRadius

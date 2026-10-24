@@ -243,32 +243,108 @@ std::optional<Occurrence> Queries::occurrence(const QString &id) const
     return readOccurrence(q);
 }
 
+namespace {
+const char *const kEventColumns =
+    "id, title, is_all_day, start_date, end_date, start_at, end_at, blocking_mode, allowed_tags, color, location, description";
+
+Event readEvent(const QSqlQuery &q)
+{
+    Event e;
+    e.id = q.value(0).toString();
+    e.title = q.value(1).toString();
+    e.allDay = q.value(2).toBool();
+    e.startDate = QDate::fromString(q.value(3).toString(), Qt::ISODate);
+    e.endDate = QDate::fromString(q.value(4).toString(), Qt::ISODate);
+    e.startAt = q.value(5).toLongLong();
+    e.endAt = q.value(6).toLongLong();
+    e.blocking.mode = blockingModeFromString(q.value(7).toString()).value_or(BlockingMode::None);
+    e.blocking.allowedTags = stringList(q.value(8));
+    e.color = q.value(9).toString();
+    e.location = q.value(10).toString();
+    e.description = q.value(11).toString();
+    return e;
+}
+
+HealthLog readHealth(const QSqlQuery &q)
+{
+    HealthLog h;
+    h.id = q.value(0).toString();
+    h.date = QDate::fromString(q.value(1).toString(), Qt::ISODate);
+    if (!q.value(2).isNull())
+        h.sleepScore = q.value(2).toInt();
+    if (!q.value(3).isNull())
+        h.readinessScore = q.value(3).toInt();
+    if (!q.value(4).isNull())
+        h.hoursSlept = q.value(4).toDouble();
+    h.notes = q.value(5).toString();
+    return h;
+}
+} // namespace
+
 QList<Event> Queries::events(qint64 from, qint64 to, QDate firstDay, QDate lastDay) const
 {
     QList<Event> out;
     QSqlQuery q = run(m_db,
-                      QStringLiteral("SELECT id, title, is_all_day, start_date, end_date, start_at, end_at, blocking_mode, "
-                                     "allowed_tags, color, location FROM events "
+                      QStringLiteral("SELECT %1 FROM events "
                                      "WHERE (is_all_day = 0 AND start_at < ? AND end_at > ?) "
                                      "   OR (is_all_day = 1 AND start_date <= ? AND end_date >= ?) "
-                                     "ORDER BY is_all_day DESC, start_at, start_date"),
+                                     "ORDER BY is_all_day DESC, start_at, start_date")
+                          .arg(QLatin1String(kEventColumns)),
                       {to, from, lastDay.toString(Qt::ISODate), firstDay.toString(Qt::ISODate)});
-    while (q.next()) {
-        Event e;
-        e.id = q.value(0).toString();
-        e.title = q.value(1).toString();
-        e.allDay = q.value(2).toBool();
-        e.startDate = QDate::fromString(q.value(3).toString(), Qt::ISODate);
-        e.endDate = QDate::fromString(q.value(4).toString(), Qt::ISODate);
-        e.startAt = q.value(5).toLongLong();
-        e.endAt = q.value(6).toLongLong();
-        e.blocking.mode = blockingModeFromString(q.value(7).toString()).value_or(BlockingMode::None);
-        e.blocking.allowedTags = stringList(q.value(8));
-        e.color = q.value(9).toString();
-        e.location = q.value(10).toString();
-        out.append(e);
-    }
+    while (q.next())
+        out.append(readEvent(q));
     return out;
+}
+
+std::optional<Event> Queries::event(const QString &id) const
+{
+    QSqlQuery q = run(m_db, QStringLiteral("SELECT %1 FROM events WHERE id = ?").arg(QLatin1String(kEventColumns)), {id});
+    if (!q.next())
+        return std::nullopt;
+    return readEvent(q);
+}
+
+QList<EnergyLog> Queries::energyLogs(qint64 from, qint64 to) const
+{
+    QList<EnergyLog> out;
+    QSqlQuery q = run(m_db,
+                      QStringLiteral("SELECT id, logged_at, energy_level, notes FROM energy_logs "
+                                     "WHERE logged_at >= ? AND logged_at < ? ORDER BY logged_at"),
+                      {from, to});
+    while (q.next())
+        out.append({q.value(0).toString(), q.value(1).toLongLong(), q.value(2).toInt(), q.value(3).toString()});
+    return out;
+}
+
+std::optional<EnergyLog> Queries::latestEnergy(qint64 since) const
+{
+    QSqlQuery q = run(m_db,
+                      QStringLiteral("SELECT id, logged_at, energy_level, notes FROM energy_logs "
+                                     "WHERE logged_at >= ? ORDER BY logged_at DESC LIMIT 1"),
+                      {since});
+    if (!q.next())
+        return std::nullopt;
+    return EnergyLog{q.value(0).toString(), q.value(1).toLongLong(), q.value(2).toInt(), q.value(3).toString()};
+}
+
+QList<HealthLog> Queries::healthLogs(QDate from, QDate to) const
+{
+    QList<HealthLog> out;
+    QSqlQuery q = run(m_db,
+                      QStringLiteral("SELECT id, log_date, sleep_score, readiness_score, hours_slept, notes FROM health_logs "
+                                     "WHERE log_date BETWEEN ? AND ? ORDER BY log_date"),
+                      {from.toString(Qt::ISODate), to.toString(Qt::ISODate)});
+    while (q.next())
+        out.append(readHealth(q));
+    return out;
+}
+
+std::optional<HealthLog> Queries::healthLog(QDate date) const
+{
+    const auto logs = healthLogs(date, date);
+    if (logs.isEmpty())
+        return std::nullopt;
+    return logs.first();
 }
 
 std::optional<WorkLog> Queries::activeWorkLog() const

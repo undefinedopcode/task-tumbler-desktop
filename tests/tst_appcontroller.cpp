@@ -1,7 +1,9 @@
 #include "appcontroller.h"
+#include "fakeserver.h"
 #include "tasklistmodel.h"
 
 #include <QDateTime>
+#include <QJsonArray>
 #include <QSignalSpy>
 #include <QSqlQuery>
 #include <QTest>
@@ -274,6 +276,210 @@ private slots:
         app.undo();
         QCOMPARE(app.queries().tasks().size(), 0);
         QVERIFY(app.queries().defaultCategory());
+    }
+
+private:
+    // ---- Phase 2 helpers ---------------------------------------------------
+
+    QVariantMap waitForPlan(AppController &app, const std::function<void()> &trigger)
+    {
+        QSignalSpy spy(&app, &AppController::planReady);
+        trigger();
+        if (spy.isEmpty())
+            spy.wait(5000);
+        return spy.isEmpty() ? QVariantMap() : spy.first().first().toMap();
+    }
+
+    void useOllama(FakeServer &server)
+    {
+        m_app->setSetting("ai_provider", "ollama");
+        m_app->setSetting("ollama_url", server.url().toString());
+        m_app->setSetting("ollama_model", "test-model");
+        QVERIFY(m_app->ai().value("ready").toBool());
+    }
+
+    static QJsonObject ollamaAnswer(const QJsonObject &content)
+    {
+        return {{"message", QJsonObject{{"role", "assistant"}, {"content", QString::fromUtf8(QJsonDocument(content).toJson())}}}};
+    }
+
+    QVariantList titlesOf(const QVariantList &items)
+    {
+        QVariantList out;
+        for (const QVariant &v : items)
+            out.append(v.toMap().value("title"));
+        return out;
+    }
+
+private slots:
+    void offlinePlanAcceptedAsOneStep()
+    {
+        m_app->createTask({{"title", "Report"}, {"priority", "urgent"}, {"time_estimate_minutes", 30}});
+        m_app->createTask({{"title", "Email"}, {"time_estimate_minutes", 15}});
+        const QString tomorrow = QDate::currentDate().addDays(1).toString(Qt::ISODate);
+        const QVariantMap plan = waitForPlan(*m_app, [&] { m_app->planDay(tomorrow, false); });
+        QCOMPARE(titlesOf(plan.value("blocks").toList()), QVariantList({"Report", "Email"}));
+        QVERIFY(!plan.value("usedAi").toBool());
+        // Tomorrow, in the Anytime category's hours, starting at midnight.
+        QCOMPARE(QDateTime::fromMSecsSinceEpoch(plan.value("blocks").toList().first().toMap().value("start").toLongLong()).date(),
+                 QDate::currentDate().addDays(1));
+
+        QVERIFY(m_app->acceptPlan(plan.value("blocks").toList(), plan));
+        QCOMPARE(count("schedules"), 2);
+        m_app->undo();
+        QCOMPARE(count("schedules"), 0);
+        QVERIFY(!m_app->acceptPlan({}, plan)); // nothing chosen
+    }
+
+    void aiPlanRanksAndDefers()
+    {
+        FakeServer server;
+        useOllama(server);
+        const QString a = m_app->createTask({{"title", "Big report"}, {"priority", "urgent"}});
+        const QString b = m_app->createTask({{"title", "Water plants"}, {"priority", "low"}, {"time_estimate_minutes", 10}});
+        server.reply(200, ollamaAnswer({{"order", QJsonArray{b}},
+                                        {"defer", QJsonArray{QJsonObject{{"task_id", a}, {"reason", "Needs more energy than today has"}}}},
+                                        {"notes", QJsonArray{QJsonObject{{"task_id", b}, {"note", "Easy start"}}}},
+                                        {"explanation", "A gentle day."}}));
+        const QString tomorrow = QDate::currentDate().addDays(1).toString(Qt::ISODate);
+        const QVariantMap plan = waitForPlan(*m_app, [&] { m_app->planDay(tomorrow, true); });
+        QVERIFY(plan.value("usedAi").toBool());
+        QCOMPARE(titlesOf(plan.value("blocks").toList()), QVariantList({"Water plants"}));
+        QCOMPARE(plan.value("blocks").toList().first().toMap().value("reason").toString(), QStringLiteral("Easy start"));
+        QCOMPARE(plan.value("unplaced").toList().first().toMap().value("reason").toString(), QStringLiteral("Needs more energy than today has"));
+        QCOMPARE(plan.value("explanation").toString(), QStringLiteral("A gentle day."));
+        QVERIFY(!m_app->ai().value("busy").toBool());
+
+        // The prompt carried both tasks; the call was logged and the outcome recorded.
+        const QString prompt = server.requests.first().body.value("messages").toArray().last().toObject().value("content").toString();
+        QVERIFY(prompt.contains("Big report") && prompt.contains("Water plants"));
+        QCOMPARE(count("ai_logs"), 1);
+        m_app->acceptPlan(plan.value("blocks").toList(), plan);
+        QCOMPARE(scalar(*m_db, "SELECT user_feedback FROM ai_logs").toString(), QStringLiteral("accepted"));
+    }
+
+    void aiFailureFallsBackToOfflinePlan()
+    {
+        FakeServer server;
+        useOllama(server);
+        m_app->createTask({{"title", "Report"}});
+        server.reply(500, QJsonObject{{"error", "out of memory"}});
+        const QVariantMap plan = waitForPlan(*m_app, [&] { m_app->planDay(QDate::currentDate().addDays(1).toString(Qt::ISODate), true); });
+        QVERIFY(!plan.value("usedAi").toBool());
+        QVERIFY(!plan.value("aiError").toString().isEmpty());
+        QCOMPARE(titlesOf(plan.value("blocks").toList()), QVariantList({"Report"}));
+    }
+
+    void breakDownIntoSteps()
+    {
+        FakeServer server;
+        useOllama(server);
+        const QString id = m_app->createTask({{"title", "Do taxes"}});
+        server.reply(200, ollamaAnswer({{"steps", QJsonArray{QJsonObject{{"title", "Find last year's return"}, {"minutes", 10}, {"energy", "low"}},
+                                                             QJsonObject{{"title", "Fill in income"}, {"minutes", 45}, {"energy", "high"}}}},
+                                        {"explanation", "Start by finding the paperwork."}}));
+        QSignalSpy spy(m_app.get(), &AppController::stepsReady);
+        m_app->breakDown(id);
+        QVERIFY(spy.wait(5000));
+        const QVariantList steps = spy.first().at(1).toList();
+        QCOMPARE(titlesOf(steps), QVariantList({"Find last year's return", "Fill in income"}));
+
+        QVERIFY(m_app->addSteps(id, steps));
+        const QVariantList sub = m_app->taskDetail(id).value("subtasks").toList();
+        QCOMPARE(titlesOf(sub), QVariantList({"Find last year's return", "Fill in income"})); // order kept
+        QCOMPARE(sub.last().toMap().value("energy").toString(), QStringLiteral("high"));
+        m_app->undo();
+        QVERIFY(m_app->taskDetail(id).value("subtasks").toList().isEmpty());
+    }
+
+    void aiCaptureFeedsCapture()
+    {
+        FakeServer server;
+        useOllama(server);
+        const QString text = "need to sort out the car thing before my trip next tuesday";
+        const QDate tuesday = QDate::currentDate().addDays((2 - QDate::currentDate().dayOfWeek() % 7 + 7) % 7 + 7);
+        server.reply(200, ollamaAnswer({{"title", "Get the car serviced"},
+                                        {"priority", "high"},
+                                        {"energy", "low"},
+                                        {"estimate_minutes", 60},
+                                        {"date", tuesday.toString(Qt::ISODate)},
+                                        {"time", ""},
+                                        {"tags", QJsonArray{"car"}},
+                                        {"category", ""},
+                                        {"recurrence", QJsonObject{{"type", "none"}, {"interval", 1}, {"days", QJsonArray{}}}}}));
+        QSignalSpy spy(m_app.get(), &AppController::aiCaptureReady);
+        m_app->aiCapture(text);
+        QVERIFY(spy.wait(5000));
+        QVERIFY(spy.first().at(1).toMap().value("fromAi").toBool());
+        QCOMPARE(m_app->previewCapture(text).value("title").toString(), QStringLiteral("Get the car serviced"));
+
+        const QString id = m_app->capture(text);
+        const auto t = m_app->queries().task(id);
+        QCOMPARE(t->title, QStringLiteral("Get the car serviced"));
+        QCOMPARE(t->dueDate, tuesday);
+        QCOMPARE(t->tags, QStringList({"car"}));
+        // Used once: the same text again goes back to offline parsing.
+        QVERIFY(!m_app->previewCapture(text).value("fromAi").toBool());
+    }
+
+    void energyAndHealth()
+    {
+        QVERIFY(!m_app->energy().contains("level"));
+        QVERIFY(m_app->logEnergy(3));
+        QCOMPARE(m_app->energy().value("level").toInt(), 3);
+        QCOMPARE(m_app->energy().value("label").toString(), QStringLiteral("Low"));
+        QVERIFY(!m_app->energy().value("due").toBool());
+
+        QVERIFY(m_app->saveHealth({{"sleep", "64"}, {"readiness", ""}, {"hours", "6.5"}}));
+        QCOMPARE(m_app->healthToday().value("sleep").toInt(), 64);
+        QVERIFY(m_app->healthToday().value("readiness").isNull());
+        QCOMPARE(m_app->healthToday().value("hours").toDouble(), 6.5);
+
+        const QVariantMap history = m_app->energyHistory(7);
+        QCOMPARE(history.value("days").toList().size(), 7);
+        QCOMPARE(history.value("days").toList().last().toMap().value("energy").toDouble(), 3.0);
+        QCOMPARE(history.value("days").toList().last().toMap().value("sleep").toInt(), 64);
+        QCOMPARE(history.value("energy").toList().size(), 1);
+
+        // A low check-in today keeps peak-energy work out of today's plan.
+        m_app->createTask({{"title", "Deep design work"}, {"energy_required", "peak"}});
+        const QVariantMap plan = waitForPlan(*m_app, [&] { m_app->planDay(QDate::currentDate().toString(Qt::ISODate), false); });
+        QVERIFY(plan.value("blocks").toList().isEmpty());
+        QVERIFY(plan.value("unplaced").toList().first().toMap().value("reason").toString().contains("better day"));
+    }
+
+    void eventsFromTheApp()
+    {
+        const QString date = QDate::currentDate().toString(Qt::ISODate);
+        const QString id = m_app->saveEvent({{"title", "Night shift"}, {"date", date}, {"startTime", "22:00"}, {"endTime", "02:00"},
+                                             {"blockingMode", "block_all"}, {"color", "#ec4899"}});
+        QVERIFY(!id.isEmpty());
+        const QVariantMap e = m_app->eventDetail(id);
+        QCOMPARE(e.value("startTime").toString(), QStringLiteral("22:00"));
+        QCOMPARE(e.value("endDate").toString(), QDate::currentDate().addDays(1).toString(Qt::ISODate)); // ran past midnight
+        QCOMPARE(e.value("blockingMode").toString(), QStringLiteral("block_all"));
+
+        QVERIFY(!m_app->saveEvent({{"id", id}, {"title", "Night shift"}, {"allDay", false}, {"date", date}}).size()); // no times
+        QVERIFY(!m_app->saveEvent({{"id", id}, {"title", "Holiday"}, {"allDay", true}, {"date", date}}).isEmpty());
+        QVERIFY(m_app->eventDetail(id).value("allDay").toBool());
+
+        QVERIFY(m_app->deleteEvent(id));
+        QVERIFY(m_app->eventDetail(id).isEmpty());
+        m_app->undo();
+        QCOMPARE(m_app->eventDetail(id).value("title").toString(), QStringLiteral("Holiday"));
+    }
+
+    void aiOffAndSettings()
+    {
+        QVERIFY(!m_app->ai().value("ready").toBool());
+        QSignalSpy messages(m_app.get(), &AppController::message);
+        m_app->breakDown(m_app->createTask({{"title", "x"}}));
+        QVERIFY(messages.last().first().toString().contains("Settings"));
+        m_app->setSetting("ai_provider", "anthropic");
+        QVERIFY(!m_app->ai().value("ready").toBool()); // no key yet
+        m_app->setApiKey("sk-test");                  // no keyring in tests: kept in memory
+        QVERIFY(m_app->ai().value("ready").toBool());
+        QCOMPARE(m_app->ai().value("label").toString(), QStringLiteral("Claude (claude-opus-5-5)"));
     }
 
     void importFromOnboarding()

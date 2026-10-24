@@ -4,7 +4,18 @@ A local, single-user desktop rebuild of [Task Tumbler](../task-tumbler): energy-
 
 The architecture and roadmap are in `../task-tumbler/docs/desktop-model.md`.
 
-## Status: Phase 1 (daily driver)
+## Status: Phase 2 (scheduling and AI)
+
+- **Plan my day** (Ctrl+P): fills free time with what matters, inside each category's hours and around blocks, events and routines. Demanding work goes in your best hours, easy work outside them, and prerequisites come first. Nothing is scheduled until you review the list, and accepting it is one undoable step. It works fully offline.
+- **AI, optional:** Claude through an Anthropic API key (kept in KWallet), or a local model through Ollama.
+  - The AI ranks and filters tasks and explains why. The offline planner still computes every time, so a small local model can't produce an impossible schedule.
+  - Every answer is checked against a schema, with one retry. If the AI fails, you get the offline plan and the reason.
+  - Also available: **Suggest steps** on a task, and **Ask AI** in quick capture (Ctrl+Enter) for messy notes.
+  - Task notes go to cloud AI only if you turn that on. Every call is logged locally in `ai_logs`.
+- **Energy:** one-tap check-ins (Wiped / Low / OK / Good / Great) on Today and in the planner. Low energy keeps peak-energy work off today's plan. The Energy page has sleep and readiness scores and a two-week chart.
+- **Events:** create and edit them, including what may be scheduled during them (nothing, routines only, or certain tags).
+
+Phase 1:
 
 **App** (`task-tumbler`, Kirigami):
 - **Today:** the running work timer, what's on right now, what didn't happen yet (with one-click "next free slot" / "tomorrow"), what's coming up, all-day events, and a Ready to Work grid. Ready to Work leaves out tasks that are waiting on unfinished prerequisites.
@@ -22,11 +33,11 @@ The architecture and roadmap are in `../task-tumbler/docs/desktop-model.md`.
 - Snapshot-based undo for any change.
 - SQLite storage and migrations, and the web-app importer.
 
-**Tests:** 12 suites. They cover the core, plus the app controller driven the way the QML drives it.
+**Tests:** 14 suites. They cover the core, plus the app controller driven the way the QML drives it.
 
 ## Build and run
 
-Requires Qt ≥ 6.8, KDE Frameworks ≥ 6.8 (Kirigami, KirigamiAddons, I18n, CoreAddons, DBusAddons, Notifications, StatusNotifierItem, GlobalAccel), CMake ≥ 3.20 and a C++20 compiler. `-DBUILD_APP=OFF` builds only the core, the CLI and the core tests.
+Requires Qt ≥ 6.8 (with Network), KDE Frameworks ≥ 6.8 (Kirigami, KirigamiAddons, I18n, CoreAddons, DBusAddons, Notifications, StatusNotifierItem, GlobalAccel), QtKeychain, CMake ≥ 3.20 and a C++20 compiler. `-DBUILD_APP=OFF` builds only the core, the CLI and the core tests.
 
 ```bash
 cmake -S . -B build -G Ninja
@@ -38,7 +49,7 @@ ctest --test-dir build --output-on-failure
 
 `task-tumbler --capture` opens quick capture (in the running instance if there is one). `--hidden` starts in the tray.
 
-For UI work without opening windows: `QT_QPA_PLATFORM=offscreen TUMBLER_SCREENSHOT=out.png TUMBLER_PAGE=schedule ./build/src/app/task-tumbler --db test.db`. This renders a page, saves it and quits. Pages are `today`, `tasks`, `schedule`, `categories`, `settings`, `onboarding`, `capture` and `task:<id>`.
+For UI work without opening windows: `QT_QPA_PLATFORM=offscreen TUMBLER_SCREENSHOT=out.png TUMBLER_PAGE=schedule ./build/src/app/task-tumbler --db test.db`. This renders a page, saves it and quits. Pages are `today`, `tasks`, `schedule`, `categories`, `settings`, `energy`, `onboarding`, `capture`, `plan`, `event:new`, `event:<id>` and `task:<id>`. `today|plan` runs steps 700 ms apart, like clicking through. `TUMBLER_PROBE=x,y` prints the visible items under a point.
 
 ## Moving data over from the web app
 

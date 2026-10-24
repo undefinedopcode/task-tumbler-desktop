@@ -3,6 +3,7 @@
 #include "desktop/autostart.h"
 #include "desktop/reminders.h"
 #include "desktop/tray.h"
+#include "keystore.h"
 
 #include <KAboutData>
 #include <KDBusService>
@@ -17,6 +18,7 @@
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QQuickItem>
 #include <QTimer>
 
 using namespace tumbler;
@@ -66,7 +68,8 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    AppController controller(db);
+    KeyStore keys;
+    AppController controller(db, nullptr, &keys);
     AppController::setInstance(&controller);
     controller.dailyBackup();
 
@@ -107,15 +110,36 @@ int main(int argc, char *argv[])
 
     // Development aid: TUMBLER_SCREENSHOT=out.png [TUMBLER_PAGE=tasks]
     // renders a page, saves it and quits. Use with QT_QPA_PLATFORM=offscreen.
+    // "today|plan" runs steps 700 ms apart, like clicking through.
     const QString shot = qEnvironmentVariable("TUMBLER_SCREENSHOT");
     if (!shot.isEmpty()) {
-        const QString page = qEnvironmentVariable("TUMBLER_PAGE", QStringLiteral("today"));
+        const QStringList steps = qEnvironmentVariable("TUMBLER_PAGE", QStringLiteral("today")).split(QLatin1Char('|'));
         window->show();
-        QTimer::singleShot(300, window, [window, page] {
-            QMetaObject::invokeMethod(window, "showPage", Q_ARG(QVariant, page));
-        });
-        QTimer::singleShot(1500, window, [window, shot] {
+        for (qsizetype i = 0; i < steps.size(); ++i) {
+            QTimer::singleShot(300 + int(i) * 700, window, [window, step = steps.at(i)] {
+                if (step == QLatin1String("plan"))
+                    QMetaObject::invokeMethod(window, "openPlan");
+                else
+                    QMetaObject::invokeMethod(window, "showPage", Q_ARG(QVariant, step));
+            });
+        }
+        QTimer::singleShot(1500 + int(steps.size() - 1) * 700, window, [window, shot] {
             window->grabWindow().save(shot);
+            // TUMBLER_PROBE=x,y lists the visible items covering that point.
+            const QStringList probe = qEnvironmentVariable("TUMBLER_PROBE").split(QLatin1Char(','));
+            if (probe.size() == 2) {
+                const QPointF pt(probe[0].toDouble(), probe[1].toDouble());
+                std::function<void(QQuickItem *, int)> walk = [&](QQuickItem *item, int depth) {
+                    if (!item->isVisible() || item->opacity() == 0)
+                        return;
+                    const QRectF r = item->mapRectToScene(QRectF(0, 0, item->width(), item->height()));
+                    if (r.contains(pt) && r.width() < 400)
+                        qInfo().noquote() << QString(depth, QLatin1Char(' ')) << item->metaObject()->className() << item->objectName() << r;
+                    for (QQuickItem *c : item->childItems())
+                        walk(c, depth + 1);
+                };
+                walk(window->contentItem(), 0);
+            }
             // Other open windows (quick capture) go next to it.
             for (QWindow *w : QGuiApplication::topLevelWindows()) {
                 auto *qw = qobject_cast<QQuickWindow *>(w);

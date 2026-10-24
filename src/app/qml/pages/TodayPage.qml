@@ -18,8 +18,18 @@ Kirigami.ScrollablePage {
     signal openTask(string taskId)
 
     title: today.dateLabel || i18n("Today")
+    // When a page is pushed on top, this one slides off to the left, partly
+    // under the drawer, and its cards would draw over it. Hide it while it's
+    // out of view.
+    visible: !Kirigami.ColumnView.view || Kirigami.ColumnView.inViewport
 
     actions: [
+        Kirigami.Action {
+            text: i18n("Plan my day")
+            icon.name: "view-calendar-week"
+            tooltip: i18n("Fill free time with what matters most (Ctrl+P)")
+            onTriggered: applicationWindow().openPlan()
+        },
         Kirigami.Action {
             text: i18n("Add")
             icon.name: "list-add"
@@ -35,11 +45,23 @@ Kirigami.ScrollablePage {
             onOpenTask: taskId => page.openTask(taskId)
         }
 
-        // All-day events as a quiet strip.
+        EnergyCheckIn {
+            visible: AppController.energy.due === true && AppController.working.id === undefined
+        }
+
+        // Energy and all-day events as a quiet strip.
         Flow {
             Layout.fillWidth: true
-            visible: page.today.allDay.length > 0
+            visible: page.today.allDay.length > 0 || AppController.energy.level !== undefined
             spacing: Kirigami.Units.smallSpacing
+            Chip {
+                visible: AppController.energy.level !== undefined
+                text: i18n("Energy: %1", AppController.energy.label || "")
+                iconName: "battery-060"
+                tint: (AppController.energy.level || 0) <= 4 ? Format.priorityColors.high : Kirigami.Theme.positiveTextColor
+                strong: true
+                TapHandler { onTapped: applicationWindow().showPage("energy") }
+            }
             Repeater {
                 model: page.today.allDay
                 Chip {
@@ -48,6 +70,7 @@ Kirigami.ScrollablePage {
                     iconName: "view-calendar"
                     tint: modelData.color || Kirigami.Theme.highlightColor
                     strong: true
+                    TapHandler { onTapped: applicationWindow().editEvent(parent.modelData.id) }
                 }
             }
         }

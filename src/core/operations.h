@@ -63,6 +63,15 @@ std::optional<Mutation> deleteCategory(const Queries &q, const QString &id, qint
 
 Mutation setSetting(const QString &key, const QJsonValue &value);
 
+// Events. Timed events store instants; `timezone` records the zone they were
+// entered in. All-day events store local dates.
+std::optional<Mutation> saveEvent(const Event &event, bool isNew, const QString &timezone, qint64 now, QString *error = nullptr);
+Mutation deleteEvent(const QString &id);
+
+std::optional<Mutation> logEnergy(const QString &id, int level, qint64 at, const QString &notes, QString *error = nullptr);
+// One health log per day: saving again replaces that day's values.
+std::optional<Mutation> saveHealth(const Queries &q, const HealthLog &log, qint64 now, QString *error = nullptr);
+
 } // namespace ops
 
 // Creates the occurrence rows recurring tasks are due for in [from, to].
