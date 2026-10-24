@@ -55,6 +55,13 @@ Mutation setOccurrenceTime(const QString &id, const QTime &time);
 std::optional<Mutation> startWork(const Queries &q, const QString &workLogId, const QString &taskId, qint64 now,
                                   QString *error = nullptr);
 std::optional<Mutation> stopWork(const Queries &q, qint64 now, QString *error = nullptr);
+// Stops the session as of `endedAt` (clamped between its start and now):
+// used to leave out time spent away from the computer.
+std::optional<Mutation> stopWorkAt(const Queries &q, qint64 endedAt, qint64 now, QString *error = nullptr);
+
+// Launchers. A command's target must be a non-empty JSON array of strings.
+std::optional<Mutation> addAction(const Queries &q, const TaskAction &action, qint64 now, QString *error = nullptr);
+Mutation removeAction(const QString &id);
 
 Mutation saveCategory(const Category &category, bool isNew, qint64 now);
 // Tasks in the deleted category move to the default one, which cannot itself

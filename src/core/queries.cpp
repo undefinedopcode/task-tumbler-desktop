@@ -130,6 +130,45 @@ QSqlQuery run(QSqlDatabase db, const QString &sql, const QVariantList &binds = {
 
 } // namespace
 
+QString nameOf(TaskAction::Kind kind)
+{
+    switch (kind) {
+    case TaskAction::Kind::Url:
+        return QStringLiteral("url");
+    case TaskAction::Kind::File:
+        return QStringLiteral("file");
+    case TaskAction::Kind::App:
+        return QStringLiteral("app");
+    case TaskAction::Kind::Command:
+        return QStringLiteral("command");
+    }
+    return {};
+}
+
+std::optional<TaskAction::Kind> actionKindFromString(const QString &s)
+{
+    for (auto k : {TaskAction::Kind::Url, TaskAction::Kind::File, TaskAction::Kind::App, TaskAction::Kind::Command}) {
+        if (nameOf(k) == s)
+            return k;
+    }
+    return std::nullopt;
+}
+
+namespace {
+TaskAction readAction(const QSqlQuery &q)
+{
+    TaskAction a;
+    a.id = q.value(0).toString();
+    a.taskId = q.value(1).toString();
+    a.kind = actionKindFromString(q.value(2).toString()).value_or(TaskAction::Kind::Url);
+    a.target = q.value(3).toString();
+    a.onStart = q.value(4).toString() == QLatin1String("start");
+    a.sortOrder = q.value(5).toInt();
+    return a;
+}
+const char *const kActionColumns = "id, task_id, kind, target, run_on, sort_order";
+} // namespace
+
 Queries::Queries(QSqlDatabase db)
     : m_db(db)
 {
@@ -345,6 +384,26 @@ std::optional<HealthLog> Queries::healthLog(QDate date) const
     if (logs.isEmpty())
         return std::nullopt;
     return logs.first();
+}
+
+QList<TaskAction> Queries::actions(const QString &taskId) const
+{
+    QList<TaskAction> out;
+    QSqlQuery q = run(m_db,
+                      QStringLiteral("SELECT %1 FROM task_actions WHERE task_id = ? ORDER BY sort_order, created_at")
+                          .arg(QLatin1String(kActionColumns)),
+                      {taskId});
+    while (q.next())
+        out.append(readAction(q));
+    return out;
+}
+
+std::optional<TaskAction> Queries::action(const QString &id) const
+{
+    QSqlQuery q = run(m_db, QStringLiteral("SELECT %1 FROM task_actions WHERE id = ?").arg(QLatin1String(kActionColumns)), {id});
+    if (!q.next())
+        return std::nullopt;
+    return readAction(q);
 }
 
 std::optional<WorkLog> Queries::activeWorkLog() const

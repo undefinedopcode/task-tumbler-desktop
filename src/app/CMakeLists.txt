@@ -1,12 +1,17 @@
 qt_add_executable(task-tumbler
     main.cpp
-    appcontroller.h appcontroller.cpp appcontroller_ai.cpp
+    appcontroller.h appcontroller.cpp appcontroller_ai.cpp appcontroller_desktop.cpp appcontroller_external.cpp
     keystore.h keystore.cpp
     tasklistmodel.h tasklistmodel.cpp
     variants.h variants.cpp
     desktop/reminders.h desktop/reminders.cpp
     desktop/tray.h desktop/tray.cpp
     desktop/autostart.h desktop/autostart.cpp
+    desktop/launcher.h desktop/launcher.cpp
+    desktop/idlewatch.h desktop/idlewatch.cpp
+    desktop/focusguard.h desktop/focusguard.cpp
+    desktop/dbusapi.h desktop/dbusapi.cpp
+    desktop/krunner.h desktop/krunner.cpp
 )
 
 # Must precede qt_add_qml_module to take effect.
@@ -27,6 +32,7 @@ qt_add_qml_module(task-tumbler
         qml/pages/OnboardingPage.qml
         qml/pages/PlanPage.qml
         qml/pages/EnergyPage.qml
+        qml/pages/FocusPage.qml
         qml/components/Chip.qml
         qml/components/SectionTitle.qml
         qml/components/AgendaRow.qml
@@ -36,6 +42,7 @@ qt_add_qml_module(task-tumbler
         qml/components/CategoryDialog.qml
         qml/components/EventDialog.qml
         qml/components/EnergyCheckIn.qml
+        qml/components/LauncherDialog.qml
         qml/components/Format.qml
 )
 
@@ -49,7 +56,9 @@ target_include_directories(task-tumbler PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(task-tumbler PRIVATE
     tumbler-core
     tumbler-ai
+    tumbler-mcp
     Qt6Keychain::Qt6Keychain
+    KF6::KIOGui KF6::Service KF6::IdleTime
     Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::DBus
     KF6::CoreAddons KF6::I18n KF6::I18nQml KF6::DBusAddons KF6::Notifications KF6::StatusNotifierItem KF6::GlobalAccel
 )

@@ -1,9 +1,12 @@
 #include "appcontroller.h"
+#include "desktop/dbusapi.h"
+#include "keystore.h"
 #include "fakeserver.h"
 #include "tasklistmodel.h"
 
 #include <QDateTime>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QSignalSpy>
 #include <QSqlQuery>
 #include <QTest>
@@ -12,6 +15,23 @@
 using namespace tumbler;
 
 namespace {
+// Records keyring access instead of opening KWallet.
+class FakeKeyStore : public KeyStore
+{
+public:
+    void read(const QString &key, std::function<void(const QString &, const QString &)> done) override
+    {
+        reads.append(key);
+        done(QStringLiteral("sk-from-keyring"), {});
+    }
+    void write(const QString &key, const QString &, std::function<void(const QString &)> done) override
+    {
+        writes.append(key);
+        done({});
+    }
+    QStringList reads, writes;
+};
+
 QVariant scalar(const Database &db, const QString &sql)
 {
     QSqlQuery q(db.handle());
@@ -480,6 +500,153 @@ private slots:
         m_app->setApiKey("sk-test");                  // no keyring in tests: kept in memory
         QVERIFY(m_app->ai().value("ready").toBool());
         QCOMPARE(m_app->ai().value("label").toString(), QStringLiteral("Claude (claude-opus-5-5)"));
+    }
+
+    void launchersAndApproval()
+    {
+        const QString id = m_app->createTask({{"title", "Write report"}});
+        QVERIFY(!m_app->addAction(id, "url", "docs.example.com/report", true).isEmpty());
+        const QString cmd = m_app->addAction(id, "command", "kate \"/home/me/My Report.md\"", true);
+        QVERIFY(!cmd.isEmpty());
+        QVERIFY(m_app->addAction(id, "command", "  ", true).isEmpty()); // nothing to run
+
+        const QVariantList actions = m_app->taskDetail(id).value("actions").toList();
+        QCOMPARE(actions.size(), 2);
+        QCOMPARE(actions[0].toMap().value("target").toString(), QStringLiteral("https://docs.example.com/report"));
+        QCOMPARE(actions[1].toMap().value("target").toString(), QStringLiteral("[\"kate\",\"/home/me/My Report.md\"]"));
+        QVERIFY(actions[1].toMap().value("needsApproval").toBool());
+
+        // Starting: the URL opens; the unapproved command asks instead of running.
+        QSignalSpy launches(m_app.get(), &AppController::launchRequested);
+        QSignalSpy asks(m_app.get(), &AppController::commandNeedsApproval);
+        QVERIFY(m_app->startWork(id));
+        QCOMPARE(launches.count(), 1);
+        QCOMPARE(launches.first().first().toMap().value("kind").toString(), QStringLiteral("url"));
+        QCOMPARE(asks.count(), 1);
+        QCOMPARE(asks.first().at(2).toString(), QStringLiteral("kate \"/home/me/My Report.md\""));
+
+        // Approving runs it with the exact argv, and it no longer asks.
+        m_app->approveCommand(cmd);
+        QCOMPARE(launches.count(), 2);
+        QCOMPARE(launches.last().first().toMap().value("argv").toStringList(), QStringList({"kate", "/home/me/My Report.md"}));
+        m_app->runAction(cmd);
+        QCOMPARE(launches.count(), 3);
+        QCOMPARE(asks.count(), 1);
+
+        // A different command, even slightly, asks again.
+        const QString other = m_app->addAction(id, "command", "kate /home/me/other.md", false);
+        m_app->runAction(other);
+        QCOMPARE(asks.count(), 2);
+        QVERIFY(m_app->removeAction(other));
+    }
+
+    void splitsCommandsWithoutAShell()
+    {
+        QCOMPARE(AppController::splitCommand("code  ~/proj   --new-window"), QStringList({"code", "~/proj", "--new-window"}));
+        QCOMPARE(AppController::splitCommand("mpv 'a b.mp3' \"c \\\"d\\\".mp3\" e\\ f"), QStringList({"mpv", "a b.mp3", "c \"d\".mp3", "e f"}));
+        QCOMPARE(AppController::splitCommand("echo $HOME | rm -rf /"), QStringList({"echo", "$HOME", "|", "rm", "-rf", "/"})); // literal words, no shell
+        QVERIFY(AppController::splitCommand("   ").isEmpty());
+    }
+
+    void timeAway()
+    {
+        const QString id = m_app->createTask({{"title", "Deep work"}});
+        // Not working: nothing to ask about.
+        m_app->reportAway(m_app->now() - 30 * 60000, m_app->now());
+        QVERIFY(m_app->away().isEmpty());
+
+        QVERIFY(m_app->startWork(id));
+        QSqlQuery(m_db->handle()).exec(QStringLiteral("UPDATE work_logs SET started_at = %1").arg(m_app->now() - 60 * 60000));
+        const qint64 left = m_app->now() - 30 * 60000;
+        m_app->reportAway(left, m_app->now());
+        QCOMPARE(m_app->away().value("minutes").toInt(), 30);
+        QCOMPARE(m_app->away().value("title").toString(), QStringLiteral("Deep work"));
+
+        m_app->resolveAway("trimRestart");
+        QVERIFY(m_app->away().isEmpty());
+        // The first session ended when they left (about 30 min) and a new one runs.
+        QCOMPARE(scalar(*m_db, "SELECT duration_minutes FROM work_logs WHERE ended_at IS NOT NULL").toInt(), 30);
+        QCOMPARE(m_app->working().value("taskId").toString(), id);
+
+        m_app->reportAway(m_app->now() - 15 * 60000, m_app->now()); // session started after they left: ignored
+        QVERIFY(m_app->away().isEmpty());
+    }
+
+    void krunnerMatches()
+    {
+        const QString id = m_app->createTask({{"title", "Renew passport"}});
+        QVariantList m = m_app->runnerMatches("tt call mum tomorrow at 6pm #family");
+        QCOMPARE(m.size(), 1);
+        QCOMPARE(m.first().toMap().value("text").toString(), QStringLiteral("Add task: call mum"));
+        QVERIFY(m.first().toMap().value("subtext").toString().contains("#family"));
+        QVERIFY(m_app->runnerMatches("tt").isEmpty());
+        QVERIFY(m_app->runnerMatches("re").isEmpty()); // too short to search
+
+        m = m_app->runnerMatches("passport");
+        QCOMPARE(m.size(), 1);
+        QCOMPARE(m.first().toMap().value("id").toString(), QStringLiteral("task:") + id);
+
+        QVERIFY(m_app->runRunnerMatch("add:call mum tomorrow", {}));
+        QCOMPARE(m_app->externalTasks("open", "mum").size(), 1);
+        QVERIFY(m_app->runRunnerMatch("task:" + id, "start"));
+        QCOMPARE(m_app->working().value("taskId").toString(), id);
+        QSignalSpy open(m_app.get(), &AppController::openTaskRequested);
+        QVERIFY(m_app->runRunnerMatch("task:" + id, {}));
+        QCOMPARE(open.first().first().toString(), id);
+        QVERIFY(m_app->runRunnerMatch("task:" + id, "done"));
+        QCOMPARE(m_app->queries().task(id)->status, TaskStatus::Completed);
+    }
+
+    void dbusApiAndWriteSwitch()
+    {
+        DBusApi api(m_app.get());
+        const QString id = api.Capture("water plants every day");
+        QVERIFY(!id.isEmpty());
+        const QJsonArray tasks = QJsonDocument::fromJson(api.Tasks("open", "").toUtf8()).array();
+        QCOMPARE(tasks.size(), 1);
+        QCOMPARE(tasks.first().toObject().value("title").toString(), QStringLiteral("water plants"));
+        QVERIFY(QJsonDocument::fromJson(api.Today().toUtf8()).object().contains("upcoming"));
+        QCOMPARE(QJsonDocument::fromJson(api.Task(id).toUtf8()).object().value("title").toString(), QStringLiteral("water plants"));
+        QVERIFY(!QJsonDocument::fromJson(api.Task(id).toUtf8()).object().contains("actions"));
+
+        m_app->setSetting("external_writes", false);
+        QVERIFY(api.Capture("blocked").isEmpty());
+        QVERIFY(!api.Complete(id));
+        QVERIFY(!m_app->runRunnerMatch("add:blocked too", {}));
+        QCOMPARE(QJsonDocument::fromJson(api.Tasks("all", "").toUtf8()).array().size(), 1); // reads still work
+        m_app->setSetting("external_writes", true);
+        QVERIFY(api.Complete(id));
+        QVERIFY(QJsonDocument::fromJson(api.Tasks("open", "").toUtf8()).array().isEmpty());
+        QCOMPARE(QJsonDocument::fromJson(api.Tasks("done", "").toUtf8()).array().size(), 1);
+    }
+
+    void focusMode()
+    {
+        const QString id = m_app->createTask({{"title", "Draft"}});
+        QSignalSpy spy(m_app.get(), &AppController::focusModeChanged);
+        m_app->startFocus(id);
+        QVERIFY(m_app->focusMode());
+        QCOMPARE(m_app->working().value("taskId").toString(), id);
+        m_app->setFocusMode(false);
+        QCOMPARE(spy.count(), 2);
+    }
+
+    void keyringOnlyOpenedForClaude()
+    {
+        Database fresh(QStringLiteral("keys"));
+        QVERIFY(fresh.open(QStringLiteral(":memory:")) && fresh.migrate());
+        FakeKeyStore keys;
+        AppController app(fresh, nullptr, &keys);
+        app.startFresh();
+        app.capture("anything");
+        app.setSetting("ai_provider", "ollama");
+        QVERIFY(keys.reads.isEmpty()); // no AI, then Ollama: the wallet stays shut
+
+        app.setSetting("ai_provider", "anthropic");
+        QCOMPARE(keys.reads, QStringList({"anthropic-api-key"}));
+        QVERIFY(app.ai().value("ready").toBool());
+        app.setSetting("ai_model", "claude-opus-5-5");
+        QCOMPARE(keys.reads.size(), 1); // read once, not on every settings change
     }
 
     void importFromOnboarding()

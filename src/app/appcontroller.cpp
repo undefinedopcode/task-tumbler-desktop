@@ -220,14 +220,19 @@ void AppController::refresh(const QSet<QString> &tables)
             {QStringLiteral("peakEnergyEnd"), q.setting(QStringLiteral("peak_energy_end"), QStringLiteral("12:00")).toString()},
             {QStringLiteral("breakMinutes"), q.setting(QStringLiteral("break_duration_minutes"), 15).toInt()},
             {QStringLiteral("aiHints"), q.setting(QStringLiteral("ai_scheduling_hints"), QString()).toString()},
+            {QStringLiteral("idleMinutes"), q.setting(QStringLiteral("idle_minutes"), 10).toInt()},
+            {QStringLiteral("externalWrites"), q.setting(QStringLiteral("external_writes"), true).toBool()},
+            {QStringLiteral("krunner"), q.setting(QStringLiteral("krunner"), false).toBool()},
         };
         Q_EMIT settingsChanged();
         Q_EMIT onboardingChanged();
     }
     if (tables.contains(QStringLiteral("energy_logs")) || tables.contains(QStringLiteral("settings")))
         refreshEnergy();
-    if (tables.contains(QStringLiteral("settings")))
+    if (tables.contains(QStringLiteral("settings"))) {
+        initAi(); // reads the key the first time Claude is chosen
         Q_EMIT aiChanged();
+    }
     QStringList list(tables.begin(), tables.end());
     Q_EMIT changed(list);
     refreshToday();
@@ -530,6 +535,11 @@ QVariantMap AppController::taskDetail(const QString &id) const
     m.insert(QStringLiteral("workLogs"), logs);
     m.insert(QStringLiteral("loggedMinutes"), q.loggedMinutes().value(id));
 
+    QVariantList actions;
+    for (const TaskAction &a : q.actions(id))
+        actions.append(actionToVariant(a));
+    m.insert(QStringLiteral("actions"), actions);
+
     for (const Category &c : q.categories()) {
         if (c.id == task->categoryId) {
             m.insert(QStringLiteral("categoryName"), c.name);
@@ -748,7 +758,11 @@ QVariantMap AppController::dayAgenda(const QString &isoDate) const
 bool AppController::startWork(const QString &taskId)
 {
     QString error;
-    return apply(ops::startWork(queries(), newId(), taskId, now(), &error), error);
+    if (!apply(ops::startWork(queries(), newId(), taskId, now(), &error), error))
+        return false;
+    Q_EMIT workStarted(taskId);
+    launchForTask(taskId);
+    return true;
 }
 
 bool AppController::stopWork()

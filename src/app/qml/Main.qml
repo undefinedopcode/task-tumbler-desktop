@@ -26,6 +26,15 @@ Kirigami.ApplicationWindow {
             onboarding: onboardingPage,
             energy: energyPage
         }
+        if (name === "unfocus") {
+            AppController.focusMode = false
+            return
+        }
+        if (name === "focus") {
+            showPage("today")
+            AppController.focusMode = true
+            return
+        }
         if (name === "plan") {
             showPage("today")
             openPlan()
@@ -73,6 +82,12 @@ Kirigami.ApplicationWindow {
         pageStack.layers.push(planPage)
     }
 
+    function openFocus() {
+        if (pageStack.layers.currentItem && pageStack.layers.currentItem.objectName === "focus")
+            return
+        pageStack.layers.push(focusPage)
+    }
+
     // An existing event by id, or a new one starting at `start` (ms).
     function editEvent(id, start) {
         eventDialog.edit(id, start)
@@ -80,7 +95,8 @@ Kirigami.ApplicationWindow {
 
     globalDrawer: Kirigami.GlobalDrawer {
         isMenu: false
-        modal: !root.wideScreen
+        // Tucked away while focusing: nothing but the task.
+        modal: !root.wideScreen || AppController.focusMode
         collapsible: true
         collapsed: !root.wideScreen
         title: i18n("Task Tumbler")
@@ -171,6 +187,26 @@ Kirigami.ApplicationWindow {
             root.raise()
             root.requestActivate()
         }
+        function onOpenTaskRequested(taskId) { root.openTask(taskId) }
+        function onFocusModeChanged() {
+            if (AppController.focusMode) {
+                root.show()
+                root.raise()
+                root.globalDrawer.close()
+                root.openFocus()
+            } else {
+                if (root.pageStack.layers.currentItem && root.pageStack.layers.currentItem.objectName === "focus")
+                    root.pageStack.layers.pop()
+                if (root.wideScreen)
+                    root.globalDrawer.open()
+            }
+        }
+        function onCommandNeedsApproval(actionId, taskTitle, command) {
+            approval.actionId = actionId
+            approval.taskTitle = taskTitle
+            approval.command = command
+            approval.open()
+        }
         function onOnboardingChanged() {
             if (!AppController.needsOnboarding && root.currentPage === "onboarding")
                 root.showPage("today")
@@ -205,6 +241,37 @@ Kirigami.ApplicationWindow {
         id: eventDialog
     }
 
+    // A launcher command runs only after this, once per exact command.
+    Kirigami.PromptDialog {
+        id: approval
+        property string actionId
+        property string taskTitle
+        property string command
+        title: i18n("Run this command?")
+        subtitle: i18n("“%1” wants to run:", taskTitle)
+        standardButtons: Kirigami.Dialog.NoButton
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Allow and run")
+                icon.name: "dialog-ok"
+                onTriggered: {
+                    AppController.approveCommand(approval.actionId)
+                    approval.close()
+                }
+            },
+            Kirigami.Action {
+                text: i18n("Not now")
+                icon.name: "dialog-cancel"
+                onTriggered: approval.close()
+            }
+        ]
+        Controls.Label {
+            text: approval.command
+            font.family: "monospace"
+            wrapMode: Text.WrapAnywhere
+        }
+    }
+
     Component {
         id: todayPage
         TodayPage { onOpenTask: taskId => root.openTask(taskId) }
@@ -232,6 +299,13 @@ Kirigami.ApplicationWindow {
     Component {
         id: planPage
         PlanPage {}
+    }
+    Component {
+        id: focusPage
+        FocusPage {
+            objectName: "focus"
+            Component.onDestruction: AppController.focusMode = false
+        }
     }
     Component {
         id: energyPage

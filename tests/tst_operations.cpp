@@ -344,6 +344,51 @@ private slots:
         QVERIFY(!ops::saveHealth(q, h, kNow, &error));
     }
 
+    void launchersAndTrimmedStop()
+    {
+        run(ops::createTask(makeTask("t", "Write"), kNow));
+        Queries q(db());
+        QString error;
+        TaskAction a;
+        a.id = "a1";
+        a.taskId = "t";
+        a.kind = TaskAction::Kind::Url;
+        a.target = " https://example.com/doc ";
+        run(ops::addAction(q, a, kNow));
+        a.id = "a2";
+        a.kind = TaskAction::Kind::Command;
+        a.target = R"(["kate", "/home/me/report.md"])";
+        a.onStart = false;
+        run(ops::addAction(q, a, kNow));
+        const auto actions = q.actions("t");
+        QCOMPARE(actions.size(), 2);
+        QCOMPARE(actions[0].target, QStringLiteral("https://example.com/doc"));
+        QCOMPARE(actions[1].sortOrder, 1);
+        QVERIFY(!actions[1].onStart);
+
+        a.id = "bad";
+        a.target = "kate /home/me/report.md"; // a shell string, not argv
+        QVERIFY(!ops::addAction(q, a, kNow, &error));
+        a.target = "[]";
+        QVERIFY(!ops::addAction(q, a, kNow, &error));
+        a.taskId = "missing";
+        QVERIFY(!ops::addAction(q, a, kNow, &error));
+
+        // Deleting the task takes its launchers with it, and undo brings them back.
+        auto deleted = run(ops::deleteTask("t"));
+        QCOMPARE(scalar(db(), "SELECT COUNT(*) FROM task_actions").toInt(), 0);
+        MutationRunner(db()).revert(deleted);
+        QCOMPARE(q.actions("t").size(), 2);
+        run(ops::removeAction("a1"));
+        QCOMPARE(q.actions("t").size(), 1);
+
+        // Stopping as of an earlier moment leaves the idle time out.
+        run(ops::startWork(q, "w", "t", kNow));
+        run(ops::stopWorkAt(q, kNow + 20 * 60000, kNow + 60 * 60000));
+        QCOMPARE(scalar(db(), "SELECT duration_minutes FROM work_logs").toInt(), 20);
+        QVERIFY(!ops::stopWorkAt(q, kNow, kNow, &error));
+    }
+
     void settings()
     {
         Queries q(db());

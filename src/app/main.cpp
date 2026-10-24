@@ -2,7 +2,14 @@
 #include "database.h"
 #include "desktop/autostart.h"
 #include "desktop/reminders.h"
+#include "desktop/dbusapi.h"
+#include "desktop/focusguard.h"
+#include "desktop/idlewatch.h"
+#include "desktop/krunner.h"
+#include "desktop/launcher.h"
 #include "desktop/tray.h"
+#include "dbusbackend.h"
+#include "mcpserver.h"
 #include "keystore.h"
 
 #include <KAboutData>
@@ -20,11 +27,29 @@
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QTimer>
+#include <memory>
 
 using namespace tumbler;
 
+namespace {
+// `task-tumbler --mcp`: a Model Context Protocol server on stdin/stdout for
+// agents like Claude Code. No GUI; it drives the running app over D-Bus.
+int runMcp(int argc, char *argv[])
+{
+    QCoreApplication app(argc, argv);
+    tumbler::mcp::DBusBackend backend;
+    tumbler::mcp::Server server(&backend);
+    return tumbler::mcp::runStdio(server);
+}
+} // namespace
+
 int main(int argc, char *argv[])
 {
+    for (int i = 1; i < argc; ++i) {
+        if (qstrcmp(argv[i], "--mcp") == 0)
+            return runMcp(argc, argv);
+    }
+
 #ifdef TUMBLER_DEV_DATA_DIR
     // Running from the build tree: let KNotification find our notifyrc.
     if (QDir(QStringLiteral(TUMBLER_DEV_DATA_DIR)).exists())
@@ -49,16 +74,28 @@ int main(int argc, char *argv[])
     about.setupCommandLine(&parser);
     const QCommandLineOption captureOption(QStringLiteral("capture"), i18n("Open quick capture."));
     const QCommandLineOption hiddenOption(QStringLiteral("hidden"), i18n("Start in the system tray."));
+    const QCommandLineOption addOption(QStringLiteral("add"), i18n("Capture a task (quick-capture syntax) and exit."), QStringLiteral("text"));
+    const QCommandLineOption mcpOption(QStringLiteral("mcp"), i18n("Serve the Model Context Protocol on stdin/stdout for AI agents."));
     const QCommandLineOption dbOption(QStringLiteral("db"), i18n("Use this database file (for testing)."), QStringLiteral("path"));
     parser.addOption(captureOption);
     parser.addOption(hiddenOption);
     parser.addOption(dbOption);
+    parser.addOption(addOption);
+    parser.addOption(mcpOption);
     parser.process(app);
     about.processCommandLine(&parser);
 
+    // Screenshot mode (development) must not touch the user's session: no
+    // tray icon, global shortcut, notifications, idle watching, keyring or
+    // bus names.
+    const QString shot = qEnvironmentVariable("TUMBLER_SCREENSHOT");
+    const bool sandboxed = !shot.isEmpty();
+
     // One instance per user. A second launch hands its arguments over and
     // exits; a --db test instance runs alongside instead.
-    KDBusService service(parser.isSet(dbOption) ? KDBusService::Multiple : KDBusService::Unique);
+    std::unique_ptr<KDBusService> service;
+    if (!sandboxed)
+        service = std::make_unique<KDBusService>(parser.isSet(dbOption) ? KDBusService::Multiple : KDBusService::Unique);
 
     Database db;
     QString error;
@@ -69,7 +106,7 @@ int main(int argc, char *argv[])
     }
 
     KeyStore keys;
-    AppController controller(db, nullptr, &keys);
+    AppController controller(db, nullptr, sandboxed ? nullptr : &keys);
     AppController::setInstance(&controller);
     controller.dailyBackup();
 
@@ -80,39 +117,78 @@ int main(int argc, char *argv[])
         return 1;
     auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
 
-    Tray tray(&controller, window);
-    Reminders reminders(&controller);
+    std::unique_ptr<Tray> tray;
+    std::unique_ptr<Reminders> reminders;
+    std::unique_ptr<IdleWatch> idle;
+    std::unique_ptr<FocusGuard> focus;
+    if (!sandboxed) {
+        tray = std::make_unique<Tray>(&controller, window);
+        reminders = std::make_unique<Reminders>(&controller);
+        idle = std::make_unique<IdleWatch>(&controller);
+        focus = std::make_unique<FocusGuard>(&controller);
+    }
+    Launcher launcher(&controller);
+    DBusApi api(&controller);
+    KRunnerApi runner(&controller);
+    if (!parser.isSet(dbOption) && !sandboxed) {
+        // The test instance (--db) stays off the bus so it can't be mistaken for the real one.
+        api.registerOnBus();
+        runner.registerOnBus();
+    }
 
     // Global quick-capture hotkey, rebindable in System Settings > Shortcuts.
     QAction captureAction(i18n("Quick Capture"));
     captureAction.setObjectName(QStringLiteral("quick_capture"));
-    KGlobalAccel::self()->setGlobalShortcut(&captureAction, QKeySequence(Qt::META | Qt::SHIFT | Qt::Key_Space));
+    if (!sandboxed)
+        KGlobalAccel::self()->setGlobalShortcut(&captureAction, QKeySequence(Qt::META | Qt::SHIFT | Qt::Key_Space));
     QObject::connect(&captureAction, &QAction::triggered, &controller, &AppController::showCaptureRequested);
 
-    QObject::connect(&service, &KDBusService::activateRequested, &controller, [&controller](const QStringList &args, const QString &) {
-        if (args.contains(QStringLiteral("--capture")))
-            Q_EMIT controller.showCaptureRequested();
-        else
-            Q_EMIT controller.showWindowRequested();
-    });
+    if (service) {
+        QObject::connect(service.get(), &KDBusService::activateRequested, &controller, [&controller](const QStringList &args, const QString &) {
+            // A second launch hands its arguments to this instance.
+            const qsizetype add = args.indexOf(QStringLiteral("--add"));
+            if (add >= 0 && add + 1 < args.size()) {
+                controller.capture(args.at(add + 1));
+                return;
+            }
+            for (const QString &a : args) {
+                if (a.startsWith(QLatin1String("--add="))) {
+                    controller.capture(a.mid(6));
+                    return;
+                }
+            }
+            if (args.contains(QStringLiteral("--capture")))
+                Q_EMIT controller.showCaptureRequested();
+            else
+                Q_EMIT controller.showWindowRequested();
+        });
+    }
 
-    // Keep the login item in step with the setting.
-    QObject::connect(&controller, &AppController::settingsChanged, &controller, [&controller] {
+    // Keep the login item and the KRunner plugin in step with their settings.
+    const auto syncDesktopFiles = [&controller] {
         const bool wanted = controller.settings().value(QStringLiteral("autostart")).toBool();
         if (wanted != isAutostartEnabled())
             setAutostart(wanted);
-    });
+        KRunnerApi::setPluginInstalled(controller.settings().value(QStringLiteral("krunner")).toBool());
+    };
+    if (!sandboxed) {
+        QObject::connect(&controller, &AppController::settingsChanged, &controller, syncDesktopFiles);
+        syncDesktopFiles();
+    }
 
-    if (!parser.isSet(hiddenOption))
+    // First launch with --add: capture and stay in the tray.
+    if (parser.isSet(addOption)) {
+        controller.capture(parser.value(addOption));
+    } else if (!parser.isSet(hiddenOption)) {
         window->show();
+    }
     if (parser.isSet(captureOption))
         Q_EMIT controller.showCaptureRequested();
 
     // Development aid: TUMBLER_SCREENSHOT=out.png [TUMBLER_PAGE=tasks]
     // renders a page, saves it and quits. Use with QT_QPA_PLATFORM=offscreen.
     // "today|plan" runs steps 700 ms apart, like clicking through.
-    const QString shot = qEnvironmentVariable("TUMBLER_SCREENSHOT");
-    if (!shot.isEmpty()) {
+    if (sandboxed) {
         const QStringList steps = qEnvironmentVariable("TUMBLER_PAGE", QStringLiteral("today")).split(QLatin1Char('|'));
         window->show();
         for (qsizetype i = 0; i < steps.size(); ++i) {

@@ -26,11 +26,17 @@ if(BUILD_APP)
     set(APP_DIR ${PROJECT_SOURCE_DIR}/src/app)
     qt_add_executable(tst_appcontroller tst_appcontroller.cpp
         ${APP_DIR}/appcontroller.h ${APP_DIR}/appcontroller.cpp ${APP_DIR}/appcontroller_ai.cpp
+        ${APP_DIR}/appcontroller_desktop.cpp ${APP_DIR}/appcontroller_external.cpp
+        ${APP_DIR}/desktop/dbusapi.h ${APP_DIR}/desktop/dbusapi.cpp
         ${APP_DIR}/keystore.h ${APP_DIR}/keystore.cpp
         ${APP_DIR}/tasklistmodel.h ${APP_DIR}/tasklistmodel.cpp
         ${APP_DIR}/variants.h ${APP_DIR}/variants.cpp)
     target_include_directories(tst_appcontroller PRIVATE ${APP_DIR})
-    target_link_libraries(tst_appcontroller PRIVATE tumbler-core tumbler-ai Qt6Keychain::Qt6Keychain Qt6::Test Qt6::Gui Qt6::Qml)
+    target_link_libraries(tst_appcontroller PRIVATE tumbler-core tumbler-ai Qt6Keychain::Qt6Keychain KF6::Service Qt6::DBus Qt6::Test Qt6::Gui Qt6::Qml)
+
+    qt_add_executable(tst_mcp tst_mcp.cpp)
+    target_link_libraries(tst_mcp PRIVATE tumbler-mcp Qt6::Test)
+    add_test(NAME tst_mcp COMMAND tst_mcp)
     target_compile_definitions(tst_appcontroller PRIVATE TUMBLER_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
     add_test(NAME tst_appcontroller COMMAND tst_appcontroller)
 endif()

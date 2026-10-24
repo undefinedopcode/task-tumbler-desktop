@@ -138,6 +138,45 @@ FormCard.FormCardPage {
         }
     }
 
+    FormCard.FormHeader { title: i18n("While working") }
+    FormCard.FormCard {
+        FormCard.FormSpinBoxDelegate {
+            label: i18n("Ask about time away after (minutes idle, 0 to never ask)")
+            from: 0
+            to: 120
+            stepSize: 5
+            value: page.s.idleMinutes
+            onValueModified: AppController.setSetting("idle_minutes", value)
+        }
+    }
+
+    FormCard.FormHeader { title: i18n("Other apps") }
+    FormCard.FormCard {
+        FormCard.FormSwitchDelegate {
+            text: i18n("Let other apps change tasks")
+            description: i18n("Scripts, KRunner and AI agents (through MCP) can add, finish and schedule tasks. Reading is always allowed. Changes can be undone here.")
+            checked: page.s.externalWrites
+            onToggled: AppController.setSetting("external_writes", checked)
+        }
+        FormCard.FormDelegateSeparator {}
+        FormCard.FormSwitchDelegate {
+            text: i18n("Show in KRunner")
+            description: i18n("Alt+Space, then “tt call mum tomorrow” to capture, or type a task's name to start or finish it")
+            checked: page.s.krunner
+            onToggled: AppController.setSetting("krunner", checked)
+        }
+        FormCard.FormDelegateSeparator {}
+        FormCard.FormTextDelegate {
+            text: i18n("AI agents (MCP)")
+            description: i18n("Add a stdio MCP server that runs: task-tumbler --mcp. For Claude Code: claude mcp add task-tumbler -- task-tumbler --mcp")
+        }
+        FormCard.FormDelegateSeparator {}
+        FormCard.FormTextDelegate {
+            text: i18n("From a terminal")
+            description: i18n("task-tumbler --add \"call mum tomorrow at 6pm\"")
+        }
+    }
+
     FormCard.FormHeader { title: i18n("Energy") }
     FormCard.FormCard {
         FormCard.FormTextFieldDelegate {

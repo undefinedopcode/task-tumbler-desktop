@@ -16,6 +16,9 @@ option(BUILD_APP "Build the desktop app (needs KDE Frameworks)" ON)
 
 add_subdirectory(src/core)
 add_subdirectory(src/ai)
+if(BUILD_APP)
+    add_subdirectory(src/mcp)
+endif()
 add_subdirectory(src/cli)
 
 if(BUILD_APP)
@@ -25,7 +28,7 @@ if(BUILD_APP)
 
     find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Gui Widgets Qml Quick QuickControls2 DBus)
     find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
-        Kirigami CoreAddons I18n DBusAddons Notifications StatusNotifierItem GlobalAccel)
+        Kirigami CoreAddons I18n DBusAddons Notifications StatusNotifierItem GlobalAccel KIO Service IdleTime)
     find_package(KF6KirigamiAddons 1.0 REQUIRED)
     find_package(Qt6Keychain REQUIRED)
 

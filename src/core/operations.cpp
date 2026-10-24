@@ -548,6 +548,70 @@ std::optional<Mutation> stopWork(const Queries &q, qint64 now, QString *error)
     return m;
 }
 
+std::optional<Mutation> stopWorkAt(const Queries &q, qint64 endedAt, qint64 now, QString *error)
+{
+    const auto active = q.activeWorkLog();
+    if (!active) {
+        setError(error, QStringLiteral("nothing is being worked on"));
+        return std::nullopt;
+    }
+    const qint64 end = std::clamp(endedAt, active->startedAt, now);
+    Mutation m;
+    m.text = QStringLiteral("Stop working");
+    m.scopes = {{QStringLiteral("work_logs"), QStringLiteral("ended_at IS NULL"), {}}};
+    m.apply = [end](QSqlDatabase db, QString *error) { return endActiveWork(db, end, error); };
+    return m;
+}
+
+std::optional<Mutation> addAction(const Queries &q, const TaskAction &a, qint64 now, QString *error)
+{
+    if (!q.task(a.taskId)) {
+        setError(error, QStringLiteral("task not found"));
+        return std::nullopt;
+    }
+    const QString target = a.target.trimmed();
+    if (target.isEmpty()) {
+        setError(error, QStringLiteral("nothing to open"));
+        return std::nullopt;
+    }
+    if (a.kind == TaskAction::Kind::Command) {
+        const QJsonDocument doc = QJsonDocument::fromJson(target.toUtf8());
+        bool ok = doc.isArray() && !doc.array().isEmpty();
+        for (const QJsonValue &v : doc.array())
+            ok = ok && v.isString() && !v.toString().isEmpty();
+        if (!ok) {
+            setError(error, QStringLiteral("a command is a list of words, the program first"));
+            return std::nullopt;
+        }
+    }
+    int order = 0;
+    for (const TaskAction &existing : q.actions(a.taskId))
+        order = std::max(order, existing.sortOrder + 1);
+
+    Mutation m;
+    m.text = QStringLiteral("Add launcher");
+    m.scopes = {{QStringLiteral("task_actions"), QStringLiteral("id = ?"), {a.id}}};
+    m.apply = [a, target, order, now](QSqlDatabase db, QString *error) {
+        return exec(db,
+                    QStringLiteral("INSERT INTO task_actions (id, task_id, kind, target, run_on, sort_order, created_at) "
+                                   "VALUES (?, ?, ?, ?, ?, ?, ?)"),
+                    {a.id, a.taskId, nameOf(a.kind), target, a.onStart ? QStringLiteral("start") : QStringLiteral("manual"), order, now},
+                    error);
+    };
+    return m;
+}
+
+Mutation removeAction(const QString &id)
+{
+    Mutation m;
+    m.text = QStringLiteral("Remove launcher");
+    m.scopes = {{QStringLiteral("task_actions"), QStringLiteral("id = ?"), {id}}};
+    m.apply = [id](QSqlDatabase db, QString *error) {
+        return exec(db, QStringLiteral("DELETE FROM task_actions WHERE id = ?"), {id}, error);
+    };
+    return m;
+}
+
 Mutation saveCategory(const Category &c, bool isNew, qint64 now)
 {
     Mutation m;

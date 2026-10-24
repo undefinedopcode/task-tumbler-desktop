@@ -52,6 +52,10 @@ class AppController : public QObject
     // when it's been a while and a gentle prompt is appropriate.
     Q_PROPERTY(QVariantMap energy READ energy NOTIFY energyChanged)
     Q_PROPERTY(QStringList ollamaModels READ ollamaModels NOTIFY ollamaModelsChanged)
+    // Set after coming back to the computer mid-session: {since, until,
+    // minutes, title}. Cleared by resolveAway().
+    Q_PROPERTY(QVariantMap away READ away NOTIFY awayChanged)
+    Q_PROPERTY(bool focusMode READ focusMode WRITE setFocusMode NOTIFY focusModeChanged)
 
 public:
     // `keys` is the keyring; without one (tests) the API key lives in memory.
@@ -75,6 +79,9 @@ public:
     QVariantMap ai() const;
     QVariantMap energy() const { return m_energy; }
     QStringList ollamaModels() const { return m_ollamaModels; }
+    QVariantMap away() const { return m_away; }
+    bool focusMode() const { return m_focusMode; }
+    void setFocusMode(bool on);
 
     QTimeZone zone() const;
     Queries queries() const { return Queries(m_db.handle()); }
@@ -154,6 +161,36 @@ public:
     Q_INVOKABLE void testAi();
     Q_INVOKABLE void refreshOllamaModels();
 
+    // --- launchers, focus, away (appcontroller_desktop.cpp) -------------------
+    // kind: url | file | app | command. A command's target is the words of
+    // the command line; it is split into argv here, never run by a shell.
+    Q_INVOKABLE QString addAction(const QString &taskId, const QString &kind, const QString &target, bool onStart);
+    Q_INVOKABLE bool removeAction(const QString &id);
+    Q_INVOKABLE void runAction(const QString &id);
+    // Remembers this exact command as allowed, then runs it.
+    Q_INVOKABLE void approveCommand(const QString &actionId);
+    Q_INVOKABLE QVariantList installedApps() const;
+    // Starts work if needed and enters focus mode.
+    Q_INVOKABLE void startFocus(const QString &taskId);
+    // Called by the idle watcher.
+    void reportAway(qint64 since, qint64 until);
+    // "keep" (count the time), "trim" (stop as of when you left),
+    // "trimRestart" (stop as of then and start a new session now).
+    Q_INVOKABLE void resolveAway(const QString &choice);
+
+    // --- other apps: D-Bus, KRunner, MCP (appcontroller_external.cpp) --------
+    // Open (or done/all) tasks matching `search`, as plain maps.
+    QVariantList externalTasks(const QString &filter, const QString &search) const;
+    bool externalWritesAllowed() const;
+    // KRunner: "tt <text>" offers to capture it; three or more letters find
+    // open tasks to open, start or finish. Ids: "add:<text>", "task:<id>".
+    QVariantList runnerMatches(const QString &query) const;
+    // actionId: "" (default: capture / open), "start", "done".
+    bool runRunnerMatch(const QString &matchId, const QString &actionId);
+
+    static QStringList splitCommand(const QString &line);
+    static QString commandHash(const QString &argvJson);
+
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
 
@@ -188,6 +225,13 @@ Q_SIGNALS:
     void aiChanged();
     void energyChanged();
     void ollamaModelsChanged();
+    void awayChanged();
+    void focusModeChanged();
+    // For the launcher: open this (url/file/app) or run this approved command.
+    void launchRequested(const QVariantMap &action);
+    void commandNeedsApproval(const QString &actionId, const QString &taskTitle, const QString &command);
+    void workStarted(const QString &taskId);
+    void openTaskRequested(const QString &taskId);
 
 private:
     void refresh(const QSet<QString> &tables);
@@ -198,6 +242,9 @@ private:
     QVariantMap previewOf(const CaptureResult &r) const;
     void refreshEnergy();
     void initAi();
+    void launchForTask(const QString &taskId);
+    void launch(const TaskAction &action, bool askIfNeeded);
+    QVariantMap actionToVariant(const TaskAction &a) const;
 
     // AI plumbing (appcontroller_ai.cpp)
     ai::Provider *provider();
@@ -227,10 +274,13 @@ private:
     KeyStore *m_keys;
     QString m_apiKey;
     bool m_aiBusy = false;
+    bool m_keyRequested = false;
     QStringList m_ollamaModels;
     std::unique_ptr<ai::Provider> m_provider;
     QString m_providerSignature;
     QVariantMap m_energy;
+    QVariantMap m_away;
+    bool m_focusMode = false;
     QString m_aiCaptureText;
     CaptureResult m_aiCaptureResult;
 };

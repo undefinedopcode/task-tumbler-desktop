@@ -66,6 +66,10 @@ void Reminders::notify(const QString &event, const QString &title, const QString
     n->setTitle(title);
     n->setText(text);
     n->setIconName(QStringLiteral("org.kde.tasktumbler"));
+    // Focus mode turns on Do Not Disturb; the end-of-block warning still needs
+    // to get through, since losing track of time is the point of it.
+    if (event == QLatin1String("wrapUp") && m_app->focusMode())
+        n->setUrgency(KNotification::CriticalUrgency);
 
     QPointer<AppController> app = m_app;
     const QString id = item.id;

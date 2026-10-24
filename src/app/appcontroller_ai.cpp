@@ -52,8 +52,14 @@ std::optional<int> optInt(const QVariant &v)
 
 void AppController::initAi()
 {
-    if (!m_keys)
+    // The keyring is only opened once Claude is the chosen provider: opening
+    // a closed KWallet prompts for its password, which nobody should see just
+    // for starting the app (or for not using Claude at all).
+    if (!m_keys || m_keyRequested)
         return;
+    if (queries().setting(QStringLiteral("ai_provider"), QStringLiteral("off")).toString() != QLatin1String("anthropic"))
+        return;
+    m_keyRequested = true;
     m_keys->read(kApiKeyEntry, [this](const QString &value, const QString &error) {
         if (!error.isEmpty())
             qWarning() << "couldn't read the API key from the keyring:" << error;
@@ -583,6 +589,7 @@ bool AppController::deleteEvent(const QString &id)
 
 void AppController::setApiKey(const QString &key)
 {
+    m_keyRequested = true; // a pending read must not overwrite this
     m_apiKey = key.trimmed();
     Q_EMIT aiChanged();
     if (!m_keys)

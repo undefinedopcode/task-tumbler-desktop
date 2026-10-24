@@ -64,6 +64,13 @@ FormCard.FormCardPage {
             onTriggered: taskPage.isWorking ? AppController.stopWork() : AppController.startWork(taskPage.taskId)
         },
         Kirigami.Action {
+            text: i18n("Focus")
+            icon.name: "view-fullscreen"
+            visible: !taskPage.finished
+            tooltip: i18n("Start and hide everything else")
+            onTriggered: AppController.startFocus(taskPage.taskId)
+        },
+        Kirigami.Action {
             text: i18n("Schedule")
             icon.name: "view-calendar-day"
             visible: !taskPage.finished && !taskPage.detail.isRecurring
@@ -395,6 +402,47 @@ FormCard.FormCardPage {
                     onClicked: taskPage.openTask(modelData.id)
                 }
             }
+        }
+    }
+
+    // ---- Launchers ---------------------------------------------------------
+    LauncherDialog { id: launcherDialog }
+    FormCard.FormHeader { title: i18n("When I start this") }
+    FormCard.FormCard {
+        Repeater {
+            model: taskPage.detail.actions || []
+            FormCard.FormTextDelegate {
+                required property var modelData
+                text: modelData.label
+                description: (modelData.onStart ? i18n("Opens when you start") : i18n("Only when you ask"))
+                             + (modelData.needsApproval ? " · " + i18n("asks once before running") : "")
+                leading: Kirigami.Icon {
+                    source: modelData.icon
+                    implicitWidth: Kirigami.Units.iconSizes.medium
+                    implicitHeight: implicitWidth
+                }
+                trailing: RowLayout {
+                    Controls.ToolButton {
+                        icon.name: "media-playback-start"
+                        display: Controls.AbstractButton.IconOnly
+                        text: i18n("Open now")
+                        onClicked: AppController.runAction(modelData.id)
+                    }
+                    Controls.ToolButton {
+                        icon.name: "list-remove"
+                        display: Controls.AbstractButton.IconOnly
+                        text: i18n("Remove")
+                        onClicked: AppController.removeAction(modelData.id)
+                    }
+                }
+            }
+        }
+        FormCard.FormButtonDelegate {
+            icon.name: "list-add"
+            text: i18n("Add something to open")
+            description: (taskPage.detail.actions || []).length === 0
+                         ? i18n("The doc, the project, a playlist: whatever makes starting easier") : ""
+            onClicked: launcherDialog.openFor(taskPage.taskId)
         }
     }
 

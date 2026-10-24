@@ -13,11 +13,15 @@ QT_FORCE_STDERR_LOGGING=1 ...                         # otherwise Qt/QML warning
 ```
 AI tests use `tests/fakeserver.h` (a local HTTP server); never call the real APIs from tests.
 
+**Never let test runs touch the user's desktop session.** Only run the app in sandboxed screenshot mode (`TUMBLER_SCREENSHOT`, which skips the tray, global shortcut, notifications, keyring and bus names) with `QT_QPA_PLATFORM=offscreen` and a scratch `--db`. `dbus-run-session` doesn't isolate it: portals and the keyring daemon start in the real session, and a KWallet prompt appeared on the user's screen once. Stop test processes by exact PID, never with broad `pkill -f` patterns.
+
 ## Layout
 - `src/core/`: `tumbler-core`, the domain rules and storage. QtCore and QtSql only, never GUI.
 - `src/app/`: the Kirigami app. `AppController` is the only object QML talks to. Every write goes through `AppController::apply(Mutation)`, which puts it on the undo stack. `desktop/` holds the tray, reminders and autostart.
 - `src/app/qml/`: `Main.qml`, `pages/`, `components/`. `Format.qml` is a singleton; singletons can't see `i18n()`, so it uses `qsTr`.
 - `src/ai/`: `tumbler-ai`, the providers (Claude, Ollama) and each feature's prompt, schema and answer handling (`aifeatures.*`). The AI only ranks and filters; `core/dayplanner` computes every time. Treat answers as untrusted: drop unknown ids, clamp values.
+- `src/mcp/`: the MCP server (`task-tumbler --mcp`). Protocol handling in `mcpserver.*` against a `Backend` interface; `dbusbackend.*` calls the running app. Tested with a fake backend.
+- `src/app/desktop/`: OS integration that only executes: launcher (KIO), idle watch (KIdleTime), focus guard (DND), D-Bus API, KRunner adaptor. Policy (what to launch, approvals, away/trim, runner matching, write switch) lives in `appcontroller_desktop.cpp` / `appcontroller_external.cpp` so it can be tested.
 - `src/cli/`: command-line tools.
 - `resources/migrations/NNN_name.sql`: schema migrations, embedded as `:/migrations` and applied by `Database::migrate()` using `PRAGMA user_version`. Never edit a migration that has shipped; add a new numbered file and list it in `src/core/CMakeLists.txt`.
 - `tests/`: Qt Test, one `tst_*.cpp` per area, registered in `tests/CMakeLists.txt`. Fixtures live in `tests/fixtures/`.
@@ -34,6 +38,8 @@ AI tests use `tests/fakeserver.h` (a local HTTP server); never call the real API
 - Secrets (API keys, OAuth tokens) go in the OS keychain, never in SQLite.
 - Every behaviour change from the web app gets a test and a row in the README's "intentionally differs" table.
 - QML combo boxes: set `currentIndex` from a computed index, not `indexOfValue()`, which returns -1 in bindings until the model loads.
+- The keyring is only opened when Claude is the selected provider (opening a closed KWallet prompts).
+- moc can't parse raw string literals containing quotes in a Q_OBJECT file; use ordinary escaped strings in tests.
 - Never name a header after a system header (`features.h`, `types.h`, `time.h`...) in a directory on the include path: it silently replaces glibc's.
 - Short side trips (Plan my day) open with `pageStack.layers.push`, not as a second column. Columns slide the previous page under the drawer, where Kirigami cards draw over it.
 - Logic with rules worth testing (timing, ordering, parsing) belongs in core as a pure function, with the app layer as a thin caller. See `reminderplan.h` and `today.h`.

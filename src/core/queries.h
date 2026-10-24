@@ -43,6 +43,9 @@ public:
     QList<HealthLog> healthLogs(QDate from, QDate to) const;
     std::optional<HealthLog> healthLog(QDate date) const;
 
+    QList<TaskAction> actions(const QString &taskId) const;
+    std::optional<TaskAction> action(const QString &id) const;
+
     std::optional<WorkLog> activeWorkLog() const;
     QList<WorkLog> workLogsForTask(const QString &taskId) const;
     // Minutes logged per task, finished sessions only.

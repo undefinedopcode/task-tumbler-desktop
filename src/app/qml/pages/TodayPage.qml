@@ -41,6 +41,29 @@ Kirigami.ScrollablePage {
     ColumnLayout {
         spacing: Kirigami.Units.largeSpacing
 
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            visible: AppController.away.minutes !== undefined
+            type: Kirigami.MessageType.Information
+            icon.name: "chronometer-pause"
+            text: i18n("Welcome back. You were away for %1 min. Still working on “%2”?",
+                       AppController.away.minutes || 0, AppController.away.title || "")
+            actions: [
+                Kirigami.Action {
+                    text: i18n("Yes, keep the time")
+                    onTriggered: AppController.resolveAway("keep")
+                },
+                Kirigami.Action {
+                    text: i18n("Leave the break out")
+                    onTriggered: AppController.resolveAway("trimRestart")
+                },
+                Kirigami.Action {
+                    text: i18n("Stop at %1", AppController.away.sinceLabel || "")
+                    onTriggered: AppController.resolveAway("trim")
+                }
+            ]
+        }
+
         WorkingCard {
             onOpenTask: taskId => page.openTask(taskId)
         }

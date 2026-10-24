@@ -110,6 +110,22 @@ struct HealthLog {
     QString notes;
 };
 
+// Something to open when a task starts: the document, the project, a
+// playlist. Commands are an argv list, never a shell string.
+struct TaskAction {
+    enum class Kind { Url, File, App, Command };
+    QString id;
+    QString taskId;
+    Kind kind = Kind::Url;
+    QString target;      // URL / file path / desktop-file id / argv as a JSON array
+    bool onStart = true; // run when work starts; otherwise only on demand
+    int sortOrder = 0;
+    QString label;       // for display; derived, not stored
+};
+
+QString nameOf(TaskAction::Kind kind);
+std::optional<TaskAction::Kind> actionKindFromString(const QString &s);
+
 struct Dependency {
     QString taskId;
     QString dependsOnId;

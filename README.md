@@ -4,7 +4,22 @@ A local, single-user desktop rebuild of [Task Tumbler](../task-tumbler): energy-
 
 The architecture and roadmap are in `../task-tumbler/docs/desktop-model.md`.
 
-## Status: Phase 2 (scheduling and AI)
+## Status: Phase 3 (desktop-native)
+
+- **Launchers:** "When I start this, open…" a website, a file, an app, or a command. They open when you press Start, or on demand.
+  - Commands run as plain argv, with no shell.
+  - A command asks once before it first runs, and again if it changes in any way.
+- **Focus mode:** one task fills the window, with a big timer, its steps, its launchers, and full screen if you want it. The sidebar hides, and the desktop's Do Not Disturb is on while you're in it. The five-minute wrap-up warning still gets through.
+- **Time away:** after 10 idle minutes mid-session (configurable), coming back asks whether to keep that time, leave the break out, or stop as of when you left. It never stops the timer on its own.
+- **D-Bus API:** `org.kde.tasktumbler` at `/Tasks`. It has Today, Tasks, Task, Current, Capture, Complete, StartWork, StopWork, ScheduleNextSlot and Show, with JSON results.
+- **CLI:** `task-tumbler --add "call mum tomorrow at 6pm"` captures into the running instance.
+- **KRunner** (enable it in Settings): `tt <anything>` captures. Typing part of a task's name lets you open, start or finish it.
+- **MCP server:** `task-tumbler --mcp` speaks the Model Context Protocol on stdio and drives the running app over D-Bus, so agents' changes are live and undoable.
+  - Tools: get_today, list_tasks, get_task, get_current, add_task, complete_task, start_work, stop_work, schedule_task.
+  - For Claude Code: `claude mcp add task-tumbler -- task-tumbler --mcp`.
+  - Settings → "Let other apps change tasks" makes D-Bus, KRunner and MCP read-only.
+
+Phase 2:
 
 - **Plan my day** (Ctrl+P): fills free time with what matters, inside each category's hours and around blocks, events and routines. Demanding work goes in your best hours, easy work outside them, and prerequisites come first. Nothing is scheduled until you review the list, and accepting it is one undoable step. It works fully offline.
 - **AI, optional:** Claude through an Anthropic API key (kept in KWallet), or a local model through Ollama.
@@ -33,11 +48,11 @@ Phase 1:
 - Snapshot-based undo for any change.
 - SQLite storage and migrations, and the web-app importer.
 
-**Tests:** 14 suites. They cover the core, plus the app controller driven the way the QML drives it.
+**Tests:** 15 suites. They cover the core, plus the app controller driven the way the QML drives it.
 
 ## Build and run
 
-Requires Qt ≥ 6.8 (with Network), KDE Frameworks ≥ 6.8 (Kirigami, KirigamiAddons, I18n, CoreAddons, DBusAddons, Notifications, StatusNotifierItem, GlobalAccel), QtKeychain, CMake ≥ 3.20 and a C++20 compiler. `-DBUILD_APP=OFF` builds only the core, the CLI and the core tests.
+Requires Qt ≥ 6.8 (with Network and DBus), KDE Frameworks ≥ 6.8 (Kirigami, KirigamiAddons, I18n, CoreAddons, DBusAddons, Notifications, StatusNotifierItem, GlobalAccel, KIO, Service, IdleTime), QtKeychain, CMake ≥ 3.20 and a C++20 compiler. `-DBUILD_APP=OFF` builds only the core, the CLI and the core tests.
 
 ```bash
 cmake -S . -B build -G Ninja
@@ -49,7 +64,7 @@ ctest --test-dir build --output-on-failure
 
 `task-tumbler --capture` opens quick capture (in the running instance if there is one). `--hidden` starts in the tray.
 
-For UI work without opening windows: `QT_QPA_PLATFORM=offscreen TUMBLER_SCREENSHOT=out.png TUMBLER_PAGE=schedule ./build/src/app/task-tumbler --db test.db`. This renders a page, saves it and quits. Pages are `today`, `tasks`, `schedule`, `categories`, `settings`, `energy`, `onboarding`, `capture`, `plan`, `event:new`, `event:<id>` and `task:<id>`. `today|plan` runs steps 700 ms apart, like clicking through. `TUMBLER_PROBE=x,y` prints the visible items under a point.
+For UI work without opening windows (screenshot mode is sandboxed: no tray, shortcut, notifications, keyring or bus names): `QT_QPA_PLATFORM=offscreen TUMBLER_SCREENSHOT=out.png TUMBLER_PAGE=schedule ./build/src/app/task-tumbler --db test.db`. This renders a page, saves it and quits. Pages are `today`, `tasks`, `schedule`, `categories`, `settings`, `energy`, `onboarding`, `capture`, `plan`, `event:new`, `event:<id>` and `task:<id>`. `today|plan` runs steps 700 ms apart, like clicking through. `TUMBLER_PROBE=x,y` prints the visible items under a point.
 
 ## Moving data over from the web app
 

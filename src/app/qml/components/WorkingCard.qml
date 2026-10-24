@@ -70,6 +70,12 @@ Kirigami.AbstractCard {
             }
             Controls.Button {
                 Layout.fillWidth: true
+                text: i18n("Focus")
+                icon.name: "view-fullscreen"
+                onClicked: AppController.focusMode = true
+            }
+            Controls.Button {
+                Layout.fillWidth: true
                 text: i18n("Pause")
                 icon.name: "media-playback-pause"
                 onClicked: AppController.stopWork()

@@ -14,9 +14,9 @@ class KeyStore : public QObject
 public:
     using QObject::QObject;
 
-    void read(const QString &key, std::function<void(const QString &value, const QString &error)> done);
+    virtual void read(const QString &key, std::function<void(const QString &value, const QString &error)> done);
     // An empty value deletes the entry.
-    void write(const QString &key, const QString &value, std::function<void(const QString &error)> done);
+    virtual void write(const QString &key, const QString &value, std::function<void(const QString &error)> done);
 };
 
 } // namespace tumbler
