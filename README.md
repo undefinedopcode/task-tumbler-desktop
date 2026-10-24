@@ -1,0 +1,80 @@
+# Task Tumbler Desktop
+
+A local, single-user desktop rebuild of [Task Tumbler](../task-tumbler): energy-aware task management and scheduling for ADHD/ASD brains, built with Qt 6 and QML. Data lives in one SQLite file, there is no sign-in, and AI comes from an Anthropic API key, a local Ollama model, or nothing at all.
+
+The architecture and roadmap are in `../task-tumbler/docs/desktop-model.md`.
+
+## Status: Phase 1 (daily driver)
+
+**App** (`task-tumbler`, Kirigami):
+- **Today:** the running work timer, what's on right now, what didn't happen yet (with one-click "next free slot" / "tomorrow"), what's coming up, all-day events, and a Ready to Work grid. Ready to Work leaves out tasks that are waiting on unfinished prerequisites.
+- **Tasks:** search, filters, and an at-a-glance status line for each task (blocked, due, next block, steps, routine). The detail page edits everything in place: steps, prerequisites, recurrence, and each block on the schedule.
+- **Schedule:** a day timeline with category-hour shading, side-by-side lanes for overlaps, a "now" line, and blocks you can drag to move.
+- **Quick capture:** one line of text with a live preview of what was understood ("call dentist tomorrow at 3pm ~15m #phone !high"). A time of day creates a block.
+- **Undo:** every change, including deletes and notification actions, can be undone (Ctrl+Z).
+- **Desktop integration:** a tray icon with the current task and elapsed time; notifications with Start / Bump / Done / Skip buttons; a global capture shortcut (Meta+Shift+Space); start at login; single instance; a daily backup that keeps the last 14.
+- **First run:** import from the web app, or start fresh.
+
+**Core** (`tumbler-core`, no GUI):
+- Domain rules: recurrence, dependencies, event blocking, category windows.
+- A deterministic free-slot finder.
+- The Today planner, the reminder timing rules, and the quick-capture parser.
+- Snapshot-based undo for any change.
+- SQLite storage and migrations, and the web-app importer.
+
+**Tests:** 12 suites. They cover the core, plus the app controller driven the way the QML drives it.
+
+## Build and run
+
+Requires Qt ≥ 6.8, KDE Frameworks ≥ 6.8 (Kirigami, KirigamiAddons, I18n, CoreAddons, DBusAddons, Notifications, StatusNotifierItem, GlobalAccel), CMake ≥ 3.20 and a C++20 compiler. `-DBUILD_APP=OFF` builds only the core, the CLI and the core tests.
+
+```bash
+cmake -S . -B build -G Ninja
+cmake --build build
+ctest --test-dir build --output-on-failure
+./build/src/app/task-tumbler                 # uses ~/.local/share/task-tumbler/tumbler.db
+./build/src/app/task-tumbler --db /tmp/t.db  # a separate test database, runs alongside
+```
+
+`task-tumbler --capture` opens quick capture (in the running instance if there is one). `--hidden` starts in the tray.
+
+For UI work without opening windows: `QT_QPA_PLATFORM=offscreen TUMBLER_SCREENSHOT=out.png TUMBLER_PAGE=schedule ./build/src/app/task-tumbler --db test.db`. This renders a page, saves it and quits. Pages are `today`, `tasks`, `schedule`, `categories`, `settings`, `onboarding`, `capture` and `task:<id>`.
+
+## Moving data over from the web app
+
+1. Export from the web app's database. Run this from `task-tumbler/server`; it needs Node 22.5 or newer for the SQLite path:
+
+   ```bash
+   # PostgreSQL (DATABASE_URL, or the docker default on :5433)
+   npm run export-desktop -- --out ~/tumbler-export.json
+   # or a legacy SQLite file
+   npm run export-desktop -- --sqlite ../database.sqlite --user you@example.com --out ~/tumbler-export.json
+   ```
+
+   The export never includes passwords or OAuth tokens. Integrations come across as config only and need reconnecting.
+
+2. Preview the import, then run it:
+
+   ```bash
+   ./build/src/cli/tumbler-import --dry-run ~/tumbler-export.json
+   ./build/src/cli/tumbler-import ~/tumbler-export.json   # writes ~/.local/share/task-tumbler/tumbler.db
+   ```
+
+   Or use **Import from the web app** on the app's first-run screen, or in Settings.
+
+   The import runs in a single transaction and only targets a new database. Every adjustment it makes is printed as a warning: merged duplicates, detached orphans, re-anchored recurrences, events entered in another timezone.
+
+## Behaviour that intentionally differs from the web app
+
+| Area | Web app | Desktop |
+|---|---|---|
+| Daily recurrence when the range starts before `startDate` | Produced occurrences before the start | Nothing before `startDate` |
+| Weekly recurrence created mid-week | Dropped the rest of the first week | Days from the start date onward count |
+| Every-N-weeks created mid-week | Fell on the wrong weeks | Weeks counted Sunday to Saturday from the start week. The importer re-anchors existing tasks so they keep the rhythm they already had |
+| Recurrence without `startDate` | Anchored on whatever range was requested, so it drifted | `startDate` is always set. The importer uses the first occurrence or the creation date |
+| Cancelled prerequisite | Still blocked the dependent task | No longer blocks |
+| Event `blocking_mode` | Stored but never enforced | Enforced by the scheduler (`EventBlockingRule`) |
+| Weekday of a date | `new Date("YYYY-MM-DD").getDay()`, which gives the previous day west of UTC | Calendar weekday of the local date (`weekday0`) |
+| Ready to Work | Every open one-off task without a block today | Also leaves out tasks waiting on unfinished prerequisites, and parents whose steps are still open (the steps show instead) |
+| Bumping a block that already passed | Shifted from its old start time, so it could land in the past | Shifted from now |
+| Bumping past the due date | Refused | Allowed, with a note that it's now after the due date |

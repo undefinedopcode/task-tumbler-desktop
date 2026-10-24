@@ -1,0 +1,103 @@
+{
+  "format": "task-tumbler-export",
+  "version": 1,
+  "exported_at": "2026-10-25T00:00:00.000Z",
+  "source": { "kind": "sqlite", "missing_tables": ["categories", "work_logs", "notes"] },
+  "user": { "email": "me@example.com", "name": "Me" },
+  "preferences": {
+    "timezone": "America/Vancouver",
+    "peak_energy_start": "10:00",
+    "work_start": "13:00",
+    "work_end": "21:00",
+    "ai_scheduling_hints": null,
+    "updated_at": "2025-12-04 03:38:25"
+  },
+  "tables": {
+    "tasks": [
+      { "id": "t-parent", "title": "Plan trip", "status": "in_progress", "priority": "high",
+        "tags": "[\"travel\", \" \"]", "is_recurring": 0, "created_at": "2025-11-19 02:43:32", "updated_at": "2025-11-19 02:43:32" },
+      { "id": "t-child", "title": "Book ferry", "status": "completed", "parent_task_id": "t-parent",
+        "tags": null, "complexity": 9, "due_date": "2025-11-20T08:00:00.000Z",
+        "created_at": "2025-11-19 02:44:00", "updated_at": "2025-11-19 02:44:00" },
+      { "id": "t-orphan", "title": "Lost subtask", "status": "weird", "parent_task_id": "gone",
+        "created_at": "2025-11-19 03:00:00", "updated_at": "2025-11-19 03:00:00" },
+      { "id": "t-daily", "title": "Take meds", "is_recurring": true, "is_fixed_time": true, "scheduled_time": "19:30",
+        "recurrence_pattern": "{\"type\":\"daily\",\"interval\":1}",
+        "created_at": "2025-11-19 10:00:00", "updated_at": "2025-11-19 10:00:00" },
+      { "id": "t-biweekly", "title": "Sprint demo", "is_recurring": 1,
+        "recurrence_pattern": { "type": "weekly", "interval": 2, "days": [1] },
+        "created_at": "2025-12-01 20:10:22", "updated_at": "2025-12-01 20:10:22" },
+      { "id": "t-broken", "title": "Monthly thing", "is_recurring": 1,
+        "recurrence_pattern": "{\"type\":\"monthly\",\"interval\":1}",
+        "created_at": "2025-12-01 20:10:22", "updated_at": "2025-12-01 20:10:22" }
+    ],
+    "task_dependencies": [
+      { "id": "d1", "task_id": "t-orphan", "depends_on_task_id": "t-daily", "created_at": "2025-11-20 00:00:00" },
+      { "id": "d2", "task_id": "t-daily", "depends_on_task_id": "t-orphan", "created_at": "2025-11-20 00:00:00" },
+      { "id": "d3", "task_id": "t-daily", "depends_on_task_id": "missing", "created_at": "2025-11-20 00:00:00" }
+    ],
+    "task_occurrences": [
+      { "id": "o1", "task_id": "t-daily", "occurrence_date": "2025-11-19T19:30:00", "status": "pending", "created_at": "2025-11-19 10:00:00" },
+      { "id": "o1-dup", "task_id": "t-daily", "occurrence_date": "2025-11-19T19:30:00", "status": "completed",
+        "completed_at": "2025-11-20T03:31:00.000Z", "created_at": "2025-11-19 10:00:00" },
+      { "id": "o2", "task_id": "t-daily", "occurrence_date": "2025-11-20T19:30:00", "status": "pending",
+        "scheduled_time": "20:15", "created_at": "2025-11-19 10:00:00" },
+      { "id": "o3", "task_id": "t-biweekly", "occurrence_date": "2025-12-08T20:00:00", "status": "completed", "created_at": "2025-12-01 20:10:22" },
+      { "id": "o4", "task_id": "t-biweekly", "occurrence_date": "2025-12-22T20:00:00", "status": "pending", "created_at": "2025-12-01 20:10:22" }
+    ],
+    "schedules": [
+      { "id": "s1", "task_id": "t-parent", "scheduled_start": "2025-12-03T12:15:00", "scheduled_end": "2025-12-03T13:15:00",
+        "completed": 0, "bumped_count": 0, "created_at": "2025-12-03 18:41:30" },
+      { "id": "s2", "task_id": "t-child", "scheduled_start": "2025-11-27T06:00:00.000Z", "scheduled_end": "2025-11-27T07:00:00.000Z",
+        "completed": 1, "bumped_count": 2, "work_log_id": "nope", "created_at": "2025-11-26 23:01:42" },
+      { "id": "s3", "task_id": "missing", "scheduled_start": "2025-11-27T06:00:00.000Z", "scheduled_end": "2025-11-27T07:00:00.000Z",
+        "created_at": "2025-11-26 23:01:42" }
+    ],
+    "events": [
+      { "id": "e1", "title": "Dentist", "start_date": "2025-11-30", "start_time": "12:10", "end_date": "2025-11-30", "end_time": "13:00",
+        "is_all_day": 0, "blocking_mode": "tags_only", "allowed_tags": "[\"phone\"]", "timezone": "America/Vancouver",
+        "created_at": "2025-11-28 00:00:00", "updated_at": "2025-11-28 00:00:00" },
+      { "id": "e2", "title": "Holidays", "start_date": "2025-12-24", "end_date": "2025-12-26", "is_all_day": 1,
+        "blocking_mode": "block_all", "created_at": "2025-11-28 00:00:00", "updated_at": "2025-11-28 00:00:00" },
+      { "id": "e4", "title": "Hackathon", "start_date": "2025-11-26", "start_time": "09:00", "end_date": "2025-11-26", "end_time": "16:00",
+        "is_all_day": 0, "timezone": null, "created_at": "2025-11-28 00:00:00", "updated_at": "2025-11-28 00:00:00" },
+      { "id": "e5", "title": "Ferry", "start_date": "2025-12-01", "start_time": "10:00", "end_date": "2025-12-01", "end_time": "11:00",
+        "is_all_day": 0, "timezone": "Australia/Melbourne", "created_at": "2025-11-28 00:00:00", "updated_at": "2025-11-28 00:00:00" },
+      { "id": "e3", "title": "Half-entered", "start_date": "2025-12-01", "end_date": "2025-12-01", "is_all_day": 0,
+        "created_at": "2025-11-28 00:00:00", "updated_at": "2025-11-28 00:00:00" }
+    ],
+    "energy_logs": [
+      { "id": "en1", "timestamp": "2025-11-22T09:47:30.188Z", "energy_level": 7, "notes": "ok" },
+      { "id": "en2", "timestamp": "2025-11-22T10:00:00.000Z", "energy_level": 0 }
+    ],
+    "health_logs": [
+      { "id": "h1", "log_date": "2026-03-01", "sleep_score": 80, "hours_slept": "7.5", "source": null,
+        "created_at": "2026-03-01 10:00:00", "updated_at": "2026-03-01 10:00:00" }
+    ],
+    "task_history": [
+      { "id": "th1", "task_id": "gone", "action": "completed", "timestamp": "2025-11-20 01:00:00", "details": "{\"reason\":\"x\"}" }
+    ],
+    "ai_logs": [
+      { "id": "a1", "action_type": "reshuffle", "request_context": { "date": "2025-11-20" },
+        "response": "{\"schedule\":[]}", "user_feedback": "accepted", "created_at": "2025-11-20 01:00:00" }
+    ],
+    "notes": [
+      { "id": "n1", "title": "Packing", "content": "socks", "task_id": "t-parent", "tags": ["a"],
+        "created_at": "2026-03-01 10:00:00+00", "updated_at": "2026-03-01 10:00:00+00" }
+    ],
+    "integrations": [
+      { "id": "i1", "provider": "trello", "config": "{\"boards\":[],\"sync_limit\":2}", "last_sync_at": "2025-12-05 05:51:19",
+        "sync_status": "idle", "created_at": "2025-11-26 06:05:40", "updated_at": "2025-11-26 23:46:46" }
+    ],
+    "synced_items": [
+      { "id": "si1", "integration_id": "i1", "external_id": "card1", "task_id": "t-parent", "last_synced_at": "2025-12-05 05:51:19",
+        "created_at": "2025-12-05 05:51:19" },
+      { "id": "si2", "integration_id": "i1", "external_id": "card2", "task_id": "missing", "last_synced_at": "2025-12-05 05:51:19",
+        "created_at": "2025-12-05 05:51:19" }
+    ],
+    "synced_events": [
+      { "id": "se1", "integration_id": "i1", "external_calendar_id": "cal", "external_event_id": "ev", "event_id": "e1",
+        "sync_status": "synced", "last_synced_at": "2025-12-05 05:51:19", "created_at": "2025-12-05 05:51:19" }
+    ]
+  }
+}

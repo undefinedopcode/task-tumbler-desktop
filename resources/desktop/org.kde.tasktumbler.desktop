@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=Task Tumbler
+GenericName=Task Manager
+Comment=Energy-aware tasks and scheduling
+Exec=task-tumbler %U
+Icon=org.kde.tasktumbler
+Categories=Office;ProjectManagement;Qt;KDE;
+Keywords=tasks;todo;schedule;adhd;planner;
+StartupNotify=true
+StartupWMClass=task-tumbler
+Actions=capture;
+
+[Desktop Action capture]
+Name=Quick Capture
+Exec=task-tumbler --capture

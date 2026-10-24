@@ -1,0 +1,25 @@
+[Global]
+IconName=org.kde.tasktumbler
+Comment=Task Tumbler
+DesktopEntry=org.kde.tasktumbler
+
+[Event/startingSoon]
+Name=Starting soon
+Comment=A scheduled block or recurring item is about to start
+Action=Popup
+
+[Event/startingNow]
+Name=Starting now
+Comment=A scheduled block or recurring item starts now
+Action=Popup|Sound
+Sound=Oxygen-Sys-App-Positive.ogg
+
+[Event/wrapUp]
+Name=Time to wrap up
+Comment=The block you are working in ends soon
+Action=Popup
+
+[Event/overdue]
+Name=Block missed
+Comment=A scheduled block ended without being done
+Action=Popup

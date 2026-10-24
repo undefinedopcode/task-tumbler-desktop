@@ -1,0 +1,34 @@
+find_package(Qt6 REQUIRED COMPONENTS Test)
+
+function(tumbler_add_test name)
+    qt_add_executable(${name} ${name}.cpp)
+    target_link_libraries(${name} PRIVATE tumbler-core Qt6::Test)
+    target_compile_definitions(${name} PRIVATE TUMBLER_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+    add_test(NAME ${name} COMMAND ${name})
+endfunction()
+
+tumbler_add_test(tst_recurrence)
+tumbler_add_test(tst_dependencies)
+tumbler_add_test(tst_blocking)
+tumbler_add_test(tst_categoryschedule)
+tumbler_add_test(tst_timeparse)
+tumbler_add_test(tst_database)
+tumbler_add_test(tst_importer)
+tumbler_add_test(tst_operations)
+tumbler_add_test(tst_planner)
+tumbler_add_test(tst_capture)
+tumbler_add_test(tst_reminders)
+
+# The app's controller layer, compiled straight in so it can be driven
+# without QML.
+if(BUILD_APP)
+    set(APP_DIR ${PROJECT_SOURCE_DIR}/src/app)
+    qt_add_executable(tst_appcontroller tst_appcontroller.cpp
+        ${APP_DIR}/appcontroller.h ${APP_DIR}/appcontroller.cpp
+        ${APP_DIR}/tasklistmodel.h ${APP_DIR}/tasklistmodel.cpp
+        ${APP_DIR}/variants.h ${APP_DIR}/variants.cpp)
+    target_include_directories(tst_appcontroller PRIVATE ${APP_DIR})
+    target_link_libraries(tst_appcontroller PRIVATE tumbler-core Qt6::Test Qt6::Gui Qt6::Qml)
+    target_compile_definitions(tst_appcontroller PRIVATE TUMBLER_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+    add_test(NAME tst_appcontroller COMMAND tst_appcontroller)
+endif()

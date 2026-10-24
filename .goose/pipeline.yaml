@@ -1,0 +1,19 @@
+steps:
+    - id: checkout
+      name: Checkout
+      type: git-checkout
+      docker_image: alpine/git
+      command: git clone -b ${BUILDGOOSE_GIT_BRANCH} ${BUILDGOOSE_GIT_REPO} .
+    - id: build-and-test
+      name: Build and test
+      docker_image: archlinux:latest
+      command: >-
+        pacman -Syu --noconfirm --needed base-devel cmake ninja extra-cmake-modules qt6-base qt6-declarative kirigami kirigami-addons ki18n kcoreaddons kdbusaddons knotifications kstatusnotifieritem kglobalaccel &&
+        cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release &&
+        cmake --build build &&
+        ctest --test-dir build --output-on-failure
+      depends_on:
+        - checkout
+      artifacts:
+        - build/src/app/task-tumbler
+        - build/src/cli/tumbler-import

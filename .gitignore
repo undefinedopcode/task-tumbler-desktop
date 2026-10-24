@@ -1,0 +1,8 @@
+build/
+build-*/
+*.user
+.cache/
+compile_commands.json
+*.db
+*.db-wal
+*.db-shm
