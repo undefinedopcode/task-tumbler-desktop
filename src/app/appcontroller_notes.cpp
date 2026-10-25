@@ -117,6 +117,17 @@ bool AppController::saveNote(const QString &id, const QVariantMap &fields)
     return true;
 }
 
+bool AppController::appendToNote(const QString &id, const QString &text)
+{
+    auto n = notes::get(queries(), id);
+    if (!n || text.trimmed().isEmpty())
+        return false;
+    n->content = n->content.trimmed().isEmpty() ? text.trimmed() : n->content.trimmed() + QStringLiteral("\n\n") + text.trimmed();
+    Mutation m = notes::save(*n, false, now());
+    m.text = QStringLiteral("Add to note “%1”").arg(n->title);
+    return apply(m);
+}
+
 bool AppController::deleteNote(const QString &id)
 {
     const auto n = notes::get(queries(), id);

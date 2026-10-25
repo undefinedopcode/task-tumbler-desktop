@@ -36,6 +36,13 @@ public Q_SLOTS:
     Q_SCRIPTABLE bool ScheduleNextSlot(const QString &id);
     Q_SCRIPTABLE void Show();
 
+    // Notes. search: words to find (prefix match); tag: only notes with it.
+    Q_SCRIPTABLE QString Notes(const QString &search, const QString &tag);
+    Q_SCRIPTABLE QString Note(const QString &id);
+    // tags: comma separated; taskId may be empty. Returns the new note's id.
+    Q_SCRIPTABLE QString AddNote(const QString &title, const QString &content, const QString &taskId, const QString &tags);
+    Q_SCRIPTABLE bool AppendToNote(const QString &id, const QString &text);
+
 private:
     bool mayWrite();
     AppController *m_app;

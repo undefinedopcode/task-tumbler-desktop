@@ -91,4 +91,53 @@ void DBusApi::Show()
     Q_EMIT m_app->showWindowRequested();
 }
 
+QString DBusApi::Notes(const QString &search, const QString &tag)
+{
+    QVariantList out;
+    for (const QVariant &v : m_app->notes(search, tag)) {
+        QVariantMap n = v.toMap();
+        // The UI's snippet is rich text; callers get it plain.
+        QString s = n.value(QStringLiteral("snippet")).toString();
+        s.remove(QStringLiteral("<b>")).remove(QStringLiteral("</b>"));
+        s.replace(QStringLiteral("&lt;"), QStringLiteral("<")).replace(QStringLiteral("&gt;"), QStringLiteral(">"))
+            .replace(QStringLiteral("&quot;"), QStringLiteral("\"")).replace(QStringLiteral("&amp;"), QStringLiteral("&"));
+        n.insert(QStringLiteral("snippet"), s);
+        n.remove(QStringLiteral("color"));
+        out.append(n);
+    }
+    return json(out);
+}
+
+QString DBusApi::Note(const QString &id)
+{
+    QVariantMap n = m_app->noteDetail(id);
+    if (n.isEmpty() && calledFromDBus())
+        sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("no note with id %1").arg(id));
+    n.remove(QStringLiteral("color"));
+    return json(n);
+}
+
+QString DBusApi::AddNote(const QString &title, const QString &content, const QString &taskId, const QString &tags)
+{
+    if (!mayWrite())
+        return {};
+    if (!taskId.isEmpty() && m_app->taskDetail(taskId).isEmpty()) {
+        if (calledFromDBus())
+            sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("no task with id %1").arg(taskId));
+        return {};
+    }
+    QStringList tagList;
+    for (const QString &t : tags.split(QLatin1Char(','), Qt::SkipEmptyParts))
+        tagList.append(t.trimmed());
+    return m_app->createNote({{QStringLiteral("title"), title},
+                              {QStringLiteral("content"), content},
+                              {QStringLiteral("taskId"), taskId},
+                              {QStringLiteral("tags"), tagList}});
+}
+
+bool DBusApi::AppendToNote(const QString &id, const QString &text)
+{
+    return mayWrite() && m_app->appendToNote(id, text);
+}
+
 } // namespace tumbler

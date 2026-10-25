@@ -61,6 +61,7 @@ QStringList Server::supportedVersions()
 QJsonArray Server::tools()
 {
     const QJsonObject id{{QStringLiteral("id"), prop("string", QStringLiteral("Task id, from list_tasks or get_today"))}};
+    const QJsonObject noteId{{QStringLiteral("id"), prop("string", QStringLiteral("Note id, from search_notes"))}};
     return {
         tool(QStringLiteral("get_today"),
              QStringLiteral("Today's agenda: what's on now, what was missed, what's coming up, what's being worked on, and up to "
@@ -89,6 +90,28 @@ QJsonArray Server::tools()
         tool(QStringLiteral("schedule_task"),
              QStringLiteral("Put a task in its next free slot within its category's hours, around existing blocks and events."), id,
              {QStringLiteral("id")}),
+        tool(QStringLiteral("search_notes"),
+             QStringLiteral("The user's notes, newest first, or best match first when searching. Each has id, title, a snippet, tags "
+                            "and the task it's about. Search matches every word as a prefix in titles and text."),
+             {{QStringLiteral("query"), prop("string", QStringLiteral("Words to find; leave out to list recent notes"))},
+              {QStringLiteral("tag"), prop("string", QStringLiteral("Only notes with this tag (no '#')"))}},
+             {}, true),
+        tool(QStringLiteral("get_note"), QStringLiteral("One note's full markdown text, tags and linked task."), noteId, {QStringLiteral("id")},
+             true),
+        tool(QStringLiteral("add_note"),
+             QStringLiteral("Write a new markdown note, optionally about a task. Returns the new note's id."),
+             {{QStringLiteral("title"), prop("string", QStringLiteral("Short title"))},
+              {QStringLiteral("content"), prop("string", QStringLiteral("Markdown text"))},
+              {QStringLiteral("task_id"), prop("string", QStringLiteral("Optional: the task it's about"))},
+              {QStringLiteral("tags"), QJsonObject{{QStringLiteral("type"), QStringLiteral("array")},
+                                                   {QStringLiteral("items"), QJsonObject{{QStringLiteral("type"), QStringLiteral("string")}}},
+                                                   {QStringLiteral("description"), QStringLiteral("Optional tags, without '#'")}}}},
+             {QStringLiteral("title"), QStringLiteral("content")}),
+        tool(QStringLiteral("append_to_note"),
+             QStringLiteral("Add a paragraph to the end of an existing note, leaving what's there untouched."),
+             {{QStringLiteral("id"), prop("string", QStringLiteral("Note id, from search_notes or add_note"))},
+              {QStringLiteral("text"), prop("string", QStringLiteral("Markdown to add"))}},
+             {QStringLiteral("id"), QStringLiteral("text")}),
     };
 }
 
@@ -127,7 +150,7 @@ std::optional<QJsonObject> Server::handle(const QJsonObject &message)
             {QStringLiteral("instructions"),
              QStringLiteral("Task Tumbler is the user's personal task manager (they have ADHD/ASD). Read before writing; prefer "
                             "small, concrete tasks; don't add or change things they didn't ask for. Every change can be undone in "
-                            "the app with Ctrl+Z.")},
+                            "the app with Ctrl+Z. Notes are theirs too: search them for context, and only write one when asked.")},
         });
     }
     if (method == QLatin1String("ping"))
@@ -142,6 +165,10 @@ std::optional<QJsonObject> Server::handle(const QJsonObject &message)
 QJsonObject Server::callTool(const QString &name, const QJsonObject &args)
 {
     const QString id = args.value(QLatin1String("id")).toString();
+    QStringList tagList;
+    for (const QJsonValue &t : args.value(QLatin1String("tags")).toArray())
+        tagList.append(t.toString().trimmed().remove(QLatin1Char(',')));
+    const QString tags = tagList.join(QLatin1Char(','));
     struct Call {
         QString method;
         QVariantList args;
@@ -158,14 +185,26 @@ QJsonObject Server::callTool(const QString &name, const QJsonObject &args)
         {QStringLiteral("start_work"), {QStringLiteral("StartWork"), {id}, true}},
         {QStringLiteral("stop_work"), {QStringLiteral("StopWork"), {}, false}},
         {QStringLiteral("schedule_task"), {QStringLiteral("ScheduleNextSlot"), {id}, true}},
+        {QStringLiteral("search_notes"), {QStringLiteral("Notes"), {args.value(QLatin1String("query")).toString(),
+                                                                   args.value(QLatin1String("tag")).toString()}, false}},
+        {QStringLiteral("get_note"), {QStringLiteral("Note"), {id}, true}},
+        {QStringLiteral("add_note"), {QStringLiteral("AddNote"), {args.value(QLatin1String("title")).toString(),
+                                                                 args.value(QLatin1String("content")).toString(),
+                                                                 args.value(QLatin1String("task_id")).toString(), tags}, false}},
+        {QStringLiteral("append_to_note"), {QStringLiteral("AppendToNote"), {id, args.value(QLatin1String("text")).toString()}, true}},
     };
     const auto it = calls.constFind(name);
     if (it == calls.constEnd())
         return toolText(QStringLiteral("Unknown tool: %1").arg(name), true);
+    const bool aboutNotes = name.contains(QLatin1String("note"));
     if (it->needsId && id.isEmpty())
-        return toolText(QStringLiteral("This tool needs a task id"), true);
-    if (name == QLatin1String("add_task") && args.value(QLatin1String("text")).toString().trimmed().isEmpty())
-        return toolText(QStringLiteral("add_task needs some text"), true);
+        return toolText(aboutNotes ? QStringLiteral("This tool needs a note id") : QStringLiteral("This tool needs a task id"), true);
+    if ((name == QLatin1String("add_task") || name == QLatin1String("append_to_note"))
+        && args.value(QLatin1String("text")).toString().trimmed().isEmpty())
+        return toolText(QStringLiteral("%1 needs some text").arg(name), true);
+    if (name == QLatin1String("add_note") && args.value(QLatin1String("title")).toString().trimmed().isEmpty()
+        && args.value(QLatin1String("content")).toString().trimmed().isEmpty())
+        return toolText(QStringLiteral("add_note needs a title or some content"), true);
 
     QString error;
     const QVariant value = m_backend->call(it->method, it->args, &error);
@@ -177,7 +216,7 @@ QJsonObject Server::callTool(const QString &name, const QJsonObject &args)
                               : toolText(QStringLiteral("That didn't work (check the id, or whether it's already done)."), true);
     }
     const QString text = value.toString();
-    if (name == QLatin1String("add_task")) {
+    if (name == QLatin1String("add_task") || name == QLatin1String("add_note")) {
         return text.isEmpty() ? toolText(QStringLiteral("Nothing was added."), true)
                               : toolText(QStringLiteral("{\"id\":\"%1\"}").arg(text));
     }

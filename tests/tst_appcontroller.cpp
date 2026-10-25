@@ -603,6 +603,38 @@ private slots:
         QCOMPARE(m_app->queries().task(id)->status, TaskStatus::Completed);
     }
 
+    void dbusNotes()
+    {
+        DBusApi api(m_app.get());
+        const QString task = m_app->createTask({{"title", "Release"}});
+        const QString id = api.AddNote("Release <checklist>", "tag & push", task, "work, release");
+        QVERIFY(!id.isEmpty());
+        QCOMPARE(m_app->undoText(), QStringLiteral("Add note “Release <checklist>”"));
+        QVERIFY(api.AddNote("x", "y", "no-such-task", "").isEmpty());
+
+        QVERIFY(api.AppendToNote(id, "- write changelog"));
+        QCOMPARE(m_app->undoText(), QStringLiteral("Add to note “Release <checklist>”"));
+        QVERIFY(!api.AppendToNote(id, "   "));
+        const QJsonObject note = QJsonDocument::fromJson(api.Note(id).toUtf8()).object();
+        QCOMPARE(note.value("content").toString(), QStringLiteral("tag & push\n\n- write changelog"));
+        QCOMPARE(note.value("taskTitle").toString(), QStringLiteral("Release"));
+        QCOMPARE(note.value("tags").toArray().size(), 2);
+
+        // Snippets come back as plain text, not the UI's markup.
+        const QJsonArray found = QJsonDocument::fromJson(api.Notes("push", "").toUtf8()).array();
+        QCOMPARE(found.size(), 1);
+        QCOMPARE(found.first().toObject().value("snippet").toString(), QStringLiteral("tag & push - write changelog"));
+        QCOMPARE(QJsonDocument::fromJson(api.Notes("", "release").toUtf8()).array().size(), 1);
+
+        m_app->undo();
+        QCOMPARE(QJsonDocument::fromJson(api.Note(id).toUtf8()).object().value("content").toString(), QStringLiteral("tag & push"));
+
+        m_app->setSetting("external_writes", false);
+        QVERIFY(api.AddNote("blocked", "", "", "").isEmpty());
+        QVERIFY(!api.AppendToNote(id, "blocked"));
+        m_app->setSetting("external_writes", true);
+    }
+
     void dbusApiAndWriteSwitch()
     {
         DBusApi api(m_app.get());

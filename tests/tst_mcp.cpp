@@ -98,7 +98,9 @@ private slots:
             QVERIFY(!t.toObject().value("description").toString().isEmpty());
         }
         QCOMPARE(names, QStringList({"get_today", "list_tasks", "get_task", "get_current", "add_task", "complete_task", "start_work",
-                                     "stop_work", "schedule_task"}));
+                                     "stop_work", "schedule_task", "search_notes", "get_note", "add_note", "append_to_note"}));
+        QVERIFY(tools.at(names.indexOf("search_notes")).toObject().value("annotations").toObject().value("readOnlyHint").toBool());
+        QVERIFY(!tools.at(names.indexOf("add_note")).toObject().value("annotations").toObject().value("readOnlyHint").toBool());
         // Reads are marked read-only so clients can allow them without asking.
         QVERIFY(tools.first().toObject().value("annotations").toObject().value("readOnlyHint").toBool());
         QVERIFY(!tools.at(4).toObject().value("annotations").toObject().value("readOnlyHint").toBool());
@@ -122,6 +124,34 @@ private slots:
         QVERIFY(!isToolError(*reply));
         reply = server.handle(request("tools/call", {{"name", "start_work"}, {"arguments", QJsonObject{{"id", "zzz"}}}}));
         QVERIFY(isToolError(*reply)); // backend said false
+    }
+
+    void noteToolsMapToTheDBusApi()
+    {
+        FakeBackend backend;
+        backend.answers = {{"Notes", "[]"}, {"AddNote", "note-1"}, {"AppendToNote", true}, {"Note", "{\"id\":\"note-1\"}"}};
+        Server server(&backend);
+
+        auto reply = server.handle(request("tools/call", {{"name", "search_notes"}, {"arguments", QJsonObject{{"query", "budget"}}}}));
+        QCOMPARE(backend.calls.last(), qMakePair(QStringLiteral("Notes"), QVariantList({"budget", ""})));
+
+        reply = server.handle(request("tools/call", {{"name", "add_note"},
+                                                     {"arguments", QJsonObject{{"title", "Standup"}, {"content", "- shipped login"},
+                                                                               {"task_id", "t1"}, {"tags", QJsonArray{"work", "a,b"}}}}}));
+        QCOMPARE(toolTextOf(*reply), QStringLiteral("{\"id\":\"note-1\"}"));
+        QCOMPARE(backend.calls.last(), qMakePair(QStringLiteral("AddNote"), QVariantList({"Standup", "- shipped login", "t1", "work,ab"})));
+
+        reply = server.handle(request("tools/call", {{"name", "append_to_note"}, {"arguments", QJsonObject{{"id", "note-1"}, {"text", "more"}}}}));
+        QVERIFY(!isToolError(*reply));
+        QCOMPARE(backend.calls.last().second, QVariantList({"note-1", "more"}));
+
+        // Refused before reaching the app.
+        const qsizetype before = backend.calls.size();
+        reply = server.handle(request("tools/call", {{"name", "get_note"}, {"arguments", QJsonObject{}}}));
+        QVERIFY(toolTextOf(*reply).contains("note id"));
+        QVERIFY(isToolError(*server.handle(request("tools/call", {{"name", "append_to_note"}, {"arguments", QJsonObject{{"id", "x"}, {"text", " "}}}}))));
+        QVERIFY(isToolError(*server.handle(request("tools/call", {{"name", "add_note"}, {"arguments", QJsonObject{{"title", ""}}}}))));
+        QCOMPARE(backend.calls.size(), before);
     }
 
     void toolCallValidationAndFailures()

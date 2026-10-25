@@ -167,6 +167,8 @@ public:
     Q_INVOKABLE bool saveNote(const QString &id, const QVariantMap &fields);
     Q_INVOKABLE bool deleteNote(const QString &id);
     Q_INVOKABLE bool exportNote(const QString &id, const QUrl &file);
+    // Adds a paragraph to the end, as one undoable step (for other apps).
+    Q_INVOKABLE bool appendToNote(const QString &id, const QString &text);
     // Open tasks a note can be about: [{id, title}] by title.
     Q_INVOKABLE QVariantList noteTaskChoices() const;
 
