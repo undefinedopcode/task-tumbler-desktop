@@ -4,6 +4,7 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.kirigamiaddons.formcard as FormCard
+import org.kde.prison as Prison
 import org.kde.tasktumbler
 
 FormCard.FormCardPage {
@@ -94,6 +95,130 @@ FormCard.FormCardPage {
             icon.name: "network-connect"
             text: aiCard.a.busy ? i18n("Checking…") : i18n("Test connection")
             onClicked: AppController.testAi()
+        }
+    }
+
+    FormCard.FormHeader { title: i18n("Phone") }
+    FormCard.FormCard {
+        id: phoneCard
+        readonly property var r: RemoteHub.state
+
+        FormCard.FormSwitchDelegate {
+            text: i18n("Phone companion")
+            description: i18n("Today, quick capture and reminders on your phone, over your tailnet")
+            checked: phoneCard.r.enabled
+            onToggled: RemoteHub.setEnabled(checked)
+        }
+        FormCard.FormTextDelegate {
+            visible: phoneCard.r.enabled
+            text: phoneCard.r.running ? i18n("Listening on %1", phoneCard.r.listen) : i18n("Not running")
+            description: phoneCard.r.error || (phoneCard.r.streams > 0 ? i18np("1 phone connected", "%1 phones connected", phoneCard.r.streams) : "")
+            textItem.color: phoneCard.r.error ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
+        }
+
+        FormCard.FormDelegateSeparator { visible: phoneCard.r.enabled }
+        FormCard.FormTextFieldDelegate {
+            visible: phoneCard.r.enabled
+            label: i18n("Address on your tailnet")
+            placeholderText: "https://this-machine.tailnet.ts.net:7789"
+            text: phoneCard.r.publicUrl
+            onEditingFinished: if (text !== phoneCard.r.publicUrl) RemoteHub.setPublicUrl(text)
+            trailing: Controls.Button {
+                text: i18n("Detect")
+                icon.name: "network-vpn"
+                onClicked: RemoteHub.detectTailscale()
+            }
+        }
+        FormCard.FormTextDelegate {
+            visible: phoneCard.r.enabled
+            text: i18n("Run this once to put it on your tailnet with HTTPS")
+            description: phoneCard.r.serveCommand
+            descriptionItem.font.family: "monospace"
+            trailing: Controls.Button {
+                text: i18n("Copy")
+                icon.name: "edit-copy"
+                onClicked: RemoteHub.copyToClipboard(phoneCard.r.serveCommand)
+            }
+        }
+
+        FormCard.FormDelegateSeparator { visible: phoneCard.r.enabled && phoneCard.r.running }
+        FormCard.AbstractFormDelegate {
+            visible: phoneCard.r.enabled && phoneCard.r.running
+            background: null
+            contentItem: RowLayout {
+                spacing: Kirigami.Units.largeSpacing
+                Rectangle {
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 10
+                    Layout.preferredHeight: Kirigami.Units.gridUnit * 10
+                    color: "white"
+                    radius: Kirigami.Units.cornerRadius
+                    Prison.Barcode {
+                        anchors.fill: parent
+                        anchors.margins: Kirigami.Units.smallSpacing
+                        barcodeType: Prison.Barcode.QRCode
+                        content: phoneCard.r.pairUrl
+                    }
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.Wrap
+                        font.weight: Font.DemiBold
+                        text: i18n("Scan with your phone to pair")
+                    }
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.Wrap
+                        color: Kirigami.Theme.disabledTextColor
+                        text: phoneCard.r.secure
+                              ? i18n("Then add it to the home screen and turn on notifications from its menu.")
+                              : i18n("Set the tailnet https:// address above first: phones only allow notifications and offline use over HTTPS.")
+                    }
+                    Controls.Button {
+                        text: i18n("New pairing code")
+                        icon.name: "view-refresh"
+                        onClicked: RemoteHub.rotateToken()
+                        Controls.ToolTip.text: i18n("Phones paired with the old code stop working and have to scan again")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: Kirigami.Units.toolTipDelay
+                    }
+                }
+            }
+        }
+
+        Repeater {
+            model: phoneCard.r.enabled ? phoneCard.r.phones : []
+            FormCard.FormTextDelegate {
+                required property var modelData
+                text: modelData.label
+                description: i18n("Gets notifications")
+                trailing: Controls.ToolButton {
+                    icon.name: "list-remove"
+                    text: i18n("Forget")
+                    display: Controls.AbstractButton.IconOnly
+                    onClicked: RemoteHub.forgetPhone(modelData.endpoint)
+                }
+            }
+        }
+        FormCard.FormComboBoxDelegate {
+            visible: phoneCard.r.enabled
+            text: i18n("Send reminders to the phone")
+            model: [
+                { value: "away", text: i18n("When I'm away from the computer") },
+                { value: "both", text: i18n("Always, as well as the desktop") },
+                { value: "desktop", text: i18n("Never") }
+            ]
+            textRole: "text"
+            valueRole: "value"
+            currentIndex: Math.max(0, model.findIndex(m => m.value === phoneCard.r.notify))
+            onActivated: AppController.setSetting("remote_notify", currentValue)
+        }
+        FormCard.FormButtonDelegate {
+            visible: phoneCard.r.enabled && phoneCard.r.phones.length > 0
+            icon.name: "notifications"
+            text: i18n("Send a test notification")
+            onClicked: RemoteHub.sendTest()
         }
     }
 

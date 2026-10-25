@@ -4,7 +4,24 @@ A local, single-user desktop rebuild of [Task Tumbler](../task-tumbler): energy-
 
 The architecture and roadmap are in `../task-tumbler/docs/desktop-model.md`.
 
-## Status: Phase 3 (desktop-native)
+## Status: Phase 3b (phone companion)
+
+- **On your phone, over your tailnet:** Today with Start / Done / Later / +15, Ready to Work, the running timer, an energy check-in, and quick capture with a live preview. Captures made while the computer is asleep wait on the phone and are sent later, without duplicates.
+- **Notifications with buttons on Android:** Done, +15 min, Later, Skip. They go to the phone when you're away from the computer (idle or screen locked), or always, or never, as you choose in Settings.
+- **How it works:**
+  - The app serves a small web app and API on `127.0.0.1:7789`.
+  - `tailscale serve` puts it on your tailnet with HTTPS.
+  - You pair by scanning a QR code, which carries a token in the URL fragment, so it's never sent to a server.
+  - Pushes use standard Web Push, encrypted per RFC 8291 and signed with VAPID.
+  - There's no cloud service of ours; the only third party is your phone browser's push service.
+- **Setup:**
+  1. Settings → Phone → turn it on.
+  2. Press **Detect**.
+  3. Run the `tailscale serve …` command it shows, once.
+  4. Scan the QR code with your phone.
+  5. Add the page to your home screen, and turn on notifications from its ⋯ menu.
+
+Phase 3:
 
 - **Launchers:** "When I start this, open…" a website, a file, an app, or a command. They open when you press Start, or on demand.
   - Commands run as plain argv, with no shell.
@@ -48,11 +65,11 @@ Phase 1:
 - Snapshot-based undo for any change.
 - SQLite storage and migrations, and the web-app importer.
 
-**Tests:** 15 suites. They cover the core, plus the app controller driven the way the QML drives it.
+**Tests:** 16 suites. They cover the core, plus the app controller driven the way the QML drives it.
 
 ## Build and run
 
-Requires Qt ≥ 6.8 (with Network and DBus), KDE Frameworks ≥ 6.8 (Kirigami, KirigamiAddons, I18n, CoreAddons, DBusAddons, Notifications, StatusNotifierItem, GlobalAccel, KIO, Service, IdleTime), QtKeychain, CMake ≥ 3.20 and a C++20 compiler. `-DBUILD_APP=OFF` builds only the core, the CLI and the core tests.
+Requires Qt ≥ 6.8 (with Network and DBus), KDE Frameworks ≥ 6.8 (Kirigami, KirigamiAddons, I18n, CoreAddons, DBusAddons, Notifications, StatusNotifierItem, GlobalAccel, KIO, Service, IdleTime), QtKeychain, OpenSSL 3, KDE Prison (QR codes, runtime), CMake ≥ 3.20 and a C++20 compiler. `-DBUILD_APP=OFF` builds only the core, the CLI and the core tests.
 
 ```bash
 cmake -S . -B build -G Ninja

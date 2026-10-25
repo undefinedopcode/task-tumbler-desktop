@@ -11,6 +11,7 @@
 #include "dbusbackend.h"
 #include "mcpserver.h"
 #include "keystore.h"
+#include "remote/remotehub.h"
 
 #include <KAboutData>
 #include <KDBusService>
@@ -21,6 +22,7 @@
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDir>
+#include <QFile>
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
@@ -108,6 +110,11 @@ int main(int argc, char *argv[])
     KeyStore keys;
     AppController controller(db, nullptr, sandboxed ? nullptr : &keys);
     AppController::setInstance(&controller);
+    // The phone companion. Off until enabled in Settings; in screenshot mode
+    // its secrets go to a throwaway file.
+    RemoteHub hub(&controller, sandboxed ? QDir::tempPath() + QStringLiteral("/tumbler-remote-%1.json").arg(QCoreApplication::applicationPid())
+                                         : RemoteHub::defaultSecretsPath());
+    RemoteHub::setInstance(&hub);
     controller.dailyBackup();
 
     QQmlApplicationEngine engine;
@@ -123,7 +130,7 @@ int main(int argc, char *argv[])
     std::unique_ptr<FocusGuard> focus;
     if (!sandboxed) {
         tray = std::make_unique<Tray>(&controller, window);
-        reminders = std::make_unique<Reminders>(&controller);
+        reminders = std::make_unique<Reminders>(&controller, &hub);
         idle = std::make_unique<IdleWatch>(&controller);
         focus = std::make_unique<FocusGuard>(&controller);
     }
@@ -199,7 +206,10 @@ int main(int argc, char *argv[])
                     QMetaObject::invokeMethod(window, "showPage", Q_ARG(QVariant, step));
             });
         }
-        QTimer::singleShot(1500 + int(steps.size() - 1) * 700, window, [window, shot] {
+        // TUMBLER_SHOT_DELAY keeps a sandboxed instance up longer (e.g. to
+        // point a headless browser at its phone server).
+        const int delay = qEnvironmentVariableIntValue("TUMBLER_SHOT_DELAY") > 0 ? qEnvironmentVariableIntValue("TUMBLER_SHOT_DELAY") : 1500;
+        QTimer::singleShot(delay + int(steps.size() - 1) * 700, window, [window, shot] {
             window->grabWindow().save(shot);
             // TUMBLER_PROBE=x,y lists the visible items covering that point.
             const QStringList probe = qEnvironmentVariable("TUMBLER_PROBE").split(QLatin1Char(','));
@@ -229,5 +239,8 @@ int main(int argc, char *argv[])
         });
     }
 
-    return app.exec();
+    const int result = app.exec();
+    if (sandboxed)
+        QFile::remove(QDir::tempPath() + QStringLiteral("/tumbler-remote-%1.json").arg(QCoreApplication::applicationPid()));
+    return result;
 }

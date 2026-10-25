@@ -223,6 +223,7 @@ void AppController::refresh(const QSet<QString> &tables)
             {QStringLiteral("idleMinutes"), q.setting(QStringLiteral("idle_minutes"), 10).toInt()},
             {QStringLiteral("externalWrites"), q.setting(QStringLiteral("external_writes"), true).toBool()},
             {QStringLiteral("krunner"), q.setting(QStringLiteral("krunner"), false).toBool()},
+            {QStringLiteral("remoteNotify"), q.setting(QStringLiteral("remote_notify"), QStringLiteral("away")).toString()},
         };
         Q_EMIT settingsChanged();
         Q_EMIT onboardingChanged();

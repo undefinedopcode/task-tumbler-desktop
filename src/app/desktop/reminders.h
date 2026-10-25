@@ -7,6 +7,7 @@
 namespace tumbler {
 
 class AppController;
+class RemoteHub;
 struct AgendaItem;
 
 // Desktop notifications for today's agenda, with buttons that act directly:
@@ -17,13 +18,18 @@ class Reminders : public QObject
 {
     Q_OBJECT
 public:
-    explicit Reminders(AppController *app, QObject *parent = nullptr);
+    // With a hub, reminders can go to paired phones instead of (or as well
+    // as) the desktop, depending on the remote_notify setting.
+    explicit Reminders(AppController *app, RemoteHub *hub = nullptr, QObject *parent = nullptr);
 
 private:
     void check();
     void notify(const QString &event, const QString &title, const QString &text, const AgendaItem &item, bool missed = false);
+    void pushToPhone(const QString &event, const QString &title, const QString &text, const AgendaItem &item, bool missed);
+    bool userAway() const;
 
     AppController *m_app;
+    RemoteHub *m_hub;
     QTimer m_timer;
     QSet<QString> m_fired;
     qint64 m_startedAt;

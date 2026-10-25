@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- The web app's logo: a tilted glass with tumbling cubes. -->
+  <rect x="6" y="6" width="88" height="88" rx="20" fill="#6366f1"/>
+  <g stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" transform="translate(-4 2)">
+    <path d="M 35 20 L 45 75 L 70 75 L 60 20 Z" stroke-width="4"/>
+    <line x1="45" y1="75" x2="70" y2="75" stroke-width="5"/>
+    <rect x="48" y="28" width="8" height="8" stroke-width="3" transform="rotate(15 52 32)"/>
+    <rect x="42" y="45" width="10" height="10" stroke-width="3" transform="rotate(-20 47 50)"/>
+    <rect x="54" y="58" width="9" height="9" stroke-width="3" transform="rotate(35 58.5 62.5)"/>
+    <rect x="49" y="40" width="6" height="6" stroke-width="2.5" transform="rotate(-45 52 43)"/>
+  </g>
+</svg>

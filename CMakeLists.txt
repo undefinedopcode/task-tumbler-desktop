@@ -19,6 +19,7 @@ add_subdirectory(src/ai)
 if(BUILD_APP)
     add_subdirectory(src/mcp)
 endif()
+add_subdirectory(src/remote)
 add_subdirectory(src/cli)
 
 if(BUILD_APP)

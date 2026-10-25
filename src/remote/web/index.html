@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#6366f1">
+  <title>Task Tumbler</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header>
+    <img src="icon.svg" alt="" class="logo">
+    <div class="titles">
+      <h1>Today</h1>
+      <div id="date" class="muted"></div>
+    </div>
+    <span id="link" class="link" title="Connection"></span>
+    <button id="menuButton" class="icon" aria-label="Menu">⋯</button>
+  </header>
+
+  <main id="main">
+    <section id="pair" hidden>
+      <h2>Not paired yet</h2>
+      <p>On the computer, open Task Tumbler → Settings → Phone, and scan the QR code with this phone.</p>
+    </section>
+
+    <div id="banner" class="banner" hidden></div>
+
+    <section id="working" class="card working" hidden>
+      <div class="muted small">Working on</div>
+      <div id="workingTitle" class="big"></div>
+      <div id="workingTimer" class="timer"></div>
+      <div class="row">
+        <button data-cmd="done-working" class="primary">Done</button>
+        <button data-cmd="stop">Pause</button>
+      </div>
+    </section>
+
+    <section id="energy" class="card" hidden>
+      <div class="small strong">How's your energy right now?</div>
+      <div class="row wrap">
+        <button data-energy="2">Wiped</button>
+        <button data-energy="4">Low</button>
+        <button data-energy="6">OK</button>
+        <button data-energy="8">Good</button>
+        <button data-energy="10">Great</button>
+      </div>
+    </section>
+
+    <div id="lists"></div>
+  </main>
+
+  <form id="capture" autocomplete="off">
+    <div id="preview" class="chips"></div>
+    <div class="row">
+      <input id="captureText" placeholder="call dentist tomorrow at 3pm ~15m" enterkeyhint="send">
+      <button type="submit" class="primary" aria-label="Add">Add</button>
+    </div>
+  </form>
+
+  <dialog id="menu">
+    <h2>Phone</h2>
+    <p id="pushState" class="muted"></p>
+    <button id="pushButton" class="primary">Turn on notifications</button>
+    <button id="refreshButton">Refresh</button>
+    <button id="unpairButton" class="danger">Unpair this phone</button>
+    <button id="closeMenu">Close</button>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

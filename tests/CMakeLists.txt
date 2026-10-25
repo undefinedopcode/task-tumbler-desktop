@@ -28,11 +28,12 @@ if(BUILD_APP)
         ${APP_DIR}/appcontroller.h ${APP_DIR}/appcontroller.cpp ${APP_DIR}/appcontroller_ai.cpp
         ${APP_DIR}/appcontroller_desktop.cpp ${APP_DIR}/appcontroller_external.cpp
         ${APP_DIR}/desktop/dbusapi.h ${APP_DIR}/desktop/dbusapi.cpp
+        ${APP_DIR}/remote/remotehub.h ${APP_DIR}/remote/remotehub.cpp
         ${APP_DIR}/keystore.h ${APP_DIR}/keystore.cpp
         ${APP_DIR}/tasklistmodel.h ${APP_DIR}/tasklistmodel.cpp
         ${APP_DIR}/variants.h ${APP_DIR}/variants.cpp)
-    target_include_directories(tst_appcontroller PRIVATE ${APP_DIR})
-    target_link_libraries(tst_appcontroller PRIVATE tumbler-core tumbler-ai Qt6Keychain::Qt6Keychain KF6::Service Qt6::DBus Qt6::Test Qt6::Gui Qt6::Qml)
+    target_include_directories(tst_appcontroller PRIVATE ${APP_DIR} ${APP_DIR}/remote)
+    target_link_libraries(tst_appcontroller PRIVATE tumbler-core tumbler-ai tumbler-remote Qt6Keychain::Qt6Keychain KF6::Service Qt6::DBus Qt6::Test Qt6::Gui Qt6::Qml)
 
     qt_add_executable(tst_mcp tst_mcp.cpp)
     target_link_libraries(tst_mcp PRIVATE tumbler-mcp Qt6::Test)
@@ -44,3 +45,7 @@ endif()
 qt_add_executable(tst_ai tst_ai.cpp)
 target_link_libraries(tst_ai PRIVATE tumbler-ai Qt6::Test)
 add_test(NAME tst_ai COMMAND tst_ai)
+
+qt_add_executable(tst_remote tst_remote.cpp)
+target_link_libraries(tst_remote PRIVATE tumbler-remote Qt6::Test)
+add_test(NAME tst_remote COMMAND tst_remote)

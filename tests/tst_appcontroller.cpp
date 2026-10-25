@@ -1,6 +1,7 @@
 #include "appcontroller.h"
 #include "desktop/dbusapi.h"
 #include "keystore.h"
+#include "remotehub.h"
 #include "fakeserver.h"
 #include "tasklistmodel.h"
 
@@ -10,6 +11,9 @@
 #include <QSignalSpy>
 #include <QSqlQuery>
 #include <QTest>
+#include <QTcpServer>
+#include <QTcpSocket>
+#include <QTemporaryDir>
 #include <QUrl>
 
 using namespace tumbler;
@@ -647,6 +651,125 @@ private slots:
         QVERIFY(app.ai().value("ready").toBool());
         app.setSetting("ai_model", "claude-opus-5-5");
         QCOMPARE(keys.reads.size(), 1); // read once, not on every settings change
+    }
+
+    void remoteRouting()
+    {
+        QCOMPARE(RemoteHub::route("away", true, true), QStringLiteral("phone"));
+        QCOMPARE(RemoteHub::route("away", true, false), QStringLiteral("desktop"));
+        QCOMPARE(RemoteHub::route("both", true, false), QStringLiteral("both"));
+        QCOMPARE(RemoteHub::route("desktop", true, true), QStringLiteral("desktop"));
+        QCOMPARE(RemoteHub::route("both", false, true), QStringLiteral("desktop")); // no phone paired
+    }
+
+    void remoteHubSecretsAndCommands()
+    {
+        QTemporaryDir dir;
+        const QString secrets = dir.filePath("remote.json");
+        const auto readSecrets = [&] {
+            QFile f(secrets);
+            if (!f.open(QIODevice::ReadOnly))
+                return QJsonObject();
+            return QJsonDocument::fromJson(f.readAll()).object();
+        };
+        QString token, vapid;
+        {
+            RemoteHub hub(m_app.get(), secrets);
+            token = readSecrets().value("token").toString();
+            vapid = readSecrets().value("vapidPublic").toString();
+            QVERIFY(token.size() >= 40);
+            QCOMPARE(QFile(secrets).permissions() & (QFileDevice::ReadGroup | QFileDevice::ReadOther | QFileDevice::WriteGroup | QFileDevice::WriteOther),
+                     QFileDevice::Permissions());
+            QVERIFY(hub.state().value("pairUrl").toString().endsWith("/#pair=" + token));
+            QVERIFY(!hub.state().value("secure").toBool());
+
+            QString error;
+            QJsonObject r = hub.command({{"type", "capture"}, {"text", "milk tomorrow"}, {"clientId", "c-1"}}, &error);
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+            const QString id = r.value("id").toString();
+            QVERIFY(!id.isEmpty());
+            // The phone's outbox retries: same clientId, nothing new.
+            r = hub.command({{"type", "capture"}, {"text", "milk tomorrow"}, {"clientId", "c-1"}}, &error);
+            QVERIFY(r.value("duplicate").toBool());
+            QCOMPARE(m_app->externalTasks("open", "milk").size(), 1);
+
+            QVERIFY(hub.command({{"type", "startWork"}, {"taskId", id}}, &error).value("ok").toBool());
+            QCOMPARE(hub.snapshot().value("working").toObject().value("taskId").toString(), id);
+            QVERIFY(hub.command({{"type", "stopWork"}}, &error).value("ok").toBool());
+            QVERIFY(hub.command({{"type", "energy"}, {"level", 6}}, &error).value("ok").toBool());
+            QCOMPARE(hub.snapshot().value("energy").toObject().value("level").toInt(), 6);
+            QVERIFY(hub.snapshot().value("today").toObject().contains("ready"));
+
+            error.clear();
+            hub.command({{"type", "rm -rf"}}, &error);
+            QVERIFY(error.contains("unknown"));
+            error.clear();
+            hub.command({{"type", "completeTask"}, {"taskId", "nope"}}, &error);
+            QVERIFY(!error.isEmpty());
+            QCOMPARE(hub.preview("call mum friday").value("title").toString(), QStringLiteral("call mum"));
+        }
+        // A restart keeps the pairing, the push keys and the seen captures.
+        RemoteHub again(m_app.get(), secrets);
+        QVERIFY(again.state().value("pairUrl").toString().endsWith(token));
+        QCOMPARE(QString::fromLatin1(remote::toBase64Url(again.vapidPublicKey())), vapid);
+        QString error;
+        QVERIFY(again.command({{"type", "capture"}, {"text", "milk tomorrow"}, {"clientId", "c-1"}}, &error).value("duplicate").toBool());
+
+        // Subscriptions persist and can be forgotten; a new code forgets them all.
+        remote::Subscription sub;
+        sub.endpoint = "https://fcm.googleapis.com/fcm/send/x";
+        sub.p256dh = QByteArray(65, '\x04');
+        sub.auth = QByteArray(16, 'a');
+        sub.label = "Pixel";
+        QVERIFY(again.addSubscription(sub));
+        QVERIFY(again.hasPhones());
+        QCOMPARE(readSecrets().value("subscriptions").toArray().size(), 1);
+        again.rotateToken();
+        QVERIFY(!again.hasPhones());
+        QVERIFY(!again.state().value("pairUrl").toString().endsWith(token));
+    }
+
+    void remoteHubServesWhenEnabled()
+    {
+        QTemporaryDir dir;
+        RemoteHub hub(m_app.get(), dir.filePath("remote.json"));
+        QVERIFY(!hub.state().value("running").toBool());
+
+        // A port that's free right now, rather than a fixed one that might not be.
+        quint16 freePort = 0;
+        {
+            QTcpServer probe;
+            QVERIFY(probe.listen(QHostAddress::LocalHost, 0));
+            freePort = probe.serverPort();
+        }
+        const QString port = QString::number(freePort);
+
+        m_app->setSetting("remote_listen", "0.0.0.0:" + port);
+        m_app->setSetting("remote_enabled", true);
+        QVERIFY(!hub.state().value("running").toBool());
+        QVERIFY(hub.state().value("error").toString().contains("clear"));
+
+        m_app->setSetting("remote_listen", "127.0.0.1:" + port);
+        QVERIFY2(hub.state().value("running").toBool(), qPrintable(hub.state().value("error").toString()));
+        const QString pair = hub.state().value("pairUrl").toString();
+        QCOMPARE(pair.left(pair.indexOf("/#")), "http://127.0.0.1:" + port);
+        const QByteArray token = pair.mid(pair.indexOf("#pair=") + 6).toLatin1();
+
+        QTcpSocket s;
+        s.connectToHost(QHostAddress::LocalHost, freePort);
+        QTRY_COMPARE(s.state(), QAbstractSocket::ConnectedState);
+        s.write("GET /api/snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer " + token + "\r\n\r\n");
+        QByteArray got;
+        QTRY_VERIFY((got += s.readAll()).contains("\"today\""));
+        QVERIFY(got.startsWith("HTTP/1.1 200"));
+
+        m_app->setSetting("remote_public_url", "https://box.tail1234.ts.net:7789/");
+        QVERIFY(hub.state().value("pairUrl").toString().startsWith("https://box.tail1234.ts.net:7789/#pair="));
+        QVERIFY(hub.state().value("secure").toBool());
+        QCOMPARE(hub.state().value("serveCommand").toString(), QStringLiteral("tailscale serve --bg --https=%1 http://127.0.0.1:%1").arg(port));
+
+        m_app->setSetting("remote_enabled", false);
+        QVERIFY(!hub.state().value("running").toBool());
     }
 
     void importFromOnboarding()

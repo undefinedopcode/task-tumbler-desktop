@@ -12,6 +12,7 @@ qt_add_executable(task-tumbler
     desktop/focusguard.h desktop/focusguard.cpp
     desktop/dbusapi.h desktop/dbusapi.cpp
     desktop/krunner.h desktop/krunner.cpp
+    remote/remotehub.h remote/remotehub.cpp
 )
 
 # Must precede qt_add_qml_module to take effect.
@@ -52,11 +53,12 @@ qt_add_resources(task-tumbler "icons"
     FILES "${PROJECT_SOURCE_DIR}/resources/icons/org.kde.tasktumbler.svg"
 )
 
-target_include_directories(task-tumbler PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(task-tumbler PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/remote)
 target_link_libraries(task-tumbler PRIVATE
     tumbler-core
     tumbler-ai
     tumbler-mcp
+    tumbler-remote
     Qt6Keychain::Qt6Keychain
     KF6::KIOGui KF6::Service KF6::IdleTime
     Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::DBus

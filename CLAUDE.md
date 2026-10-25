@@ -22,6 +22,11 @@ AI tests use `tests/fakeserver.h` (a local HTTP server); never call the real API
 - `src/ai/`: `tumbler-ai`, the providers (Claude, Ollama) and each feature's prompt, schema and answer handling (`aifeatures.*`). The AI only ranks and filters; `core/dayplanner` computes every time. Treat answers as untrusted: drop unknown ids, clamp values.
 - `src/mcp/`: the MCP server (`task-tumbler --mcp`). Protocol handling in `mcpserver.*` against a `Backend` interface; `dbusbackend.*` calls the running app. Tested with a fake backend.
 - `src/app/desktop/`: OS integration that only executes: launcher (KIO), idle watch (KIdleTime), focus guard (DND), D-Bus API, KRunner adaptor. Policy (what to launch, approvals, away/trim, runner matching, write switch) lives in `appcontroller_desktop.cpp` / `appcontroller_external.cpp` so it can be tested.
+- `src/remote/`: `tumbler-remote`, the phone companion's server side.
+  - `httpserver.*`: the HTTP API and event stream, with auth, lockout, origin checks and bind policy, against a `Backend` interface.
+  - `webpush.*`: RFC 8291 encryption and VAPID signing, with OpenSSL.
+  - `web/`: the phone app (vanilla JS PWA, embedded as `:/remote/web`).
+- `src/app/remote/remotehub.*`: implements that backend over AppController. It's the second QML singleton, `RemoteHub`, which drives the Settings → Phone section. Secrets live in `~/.config/task-tumbler/remote.json` (0600).
 - `src/cli/`: command-line tools.
 - `resources/migrations/NNN_name.sql`: schema migrations, embedded as `:/migrations` and applied by `Database::migrate()` using `PRAGMA user_version`. Never edit a migration that has shipped; add a new numbered file and list it in `src/core/CMakeLists.txt`.
 - `tests/`: Qt Test, one `tst_*.cpp` per area, registered in `tests/CMakeLists.txt`. Fixtures live in `tests/fixtures/`.
@@ -38,6 +43,9 @@ AI tests use `tests/fakeserver.h` (a local HTTP server); never call the real API
 - Secrets (API keys, OAuth tokens) go in the OS keychain, never in SQLite.
 - Every behaviour change from the web app gets a test and a row in the README's "intentionally differs" table.
 - QML combo boxes: set `currentIndex` from a computed index, not `indexOfValue()`, which returns -1 in bindings until the model loads.
+- Tests that run a server pick a free port at runtime, never a fixed one.
+- Phone UI checks: headless Firefox with a throwaway profile (`firefox --headless -no-remote -profile <scratch> --screenshot …`) against a sandboxed instance (`TUMBLER_SHOT_DELAY=30000`, `remote_enabled` set in a scratch DB).
+- The phone app's CSP forbids inline styles: set colours through `element.style`, never `style=""`.
 - The keyring is only opened when Claude is the selected provider (opening a closed KWallet prompts).
 - moc can't parse raw string literals containing quotes in a Q_OBJECT file; use ordinary escaped strings in tests.
 - Never name a header after a system header (`features.h`, `types.h`, `time.h`...) in a directory on the include path: it silently replaces glibc's.
