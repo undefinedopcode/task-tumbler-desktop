@@ -192,7 +192,7 @@ FormCard.FormCardPage {
         }
         FormCard.FormDelegateSeparator {}
         FormCard.FormTextAreaDelegate {
-            label: i18n("Notes")
+            label: i18n("Details")
             text: taskPage.detail.description || ""
             onEditingFinished: if (text !== (taskPage.detail.description || "")) AppController.updateTask(taskPage.taskId, { description: text })
         }
@@ -401,6 +401,36 @@ FormCard.FormCardPage {
                     display: Controls.AbstractButton.IconOnly
                     onClicked: taskPage.openTask(modelData.id)
                 }
+            }
+        }
+    }
+
+    // ---- Notes -------------------------------------------------------------
+    FormCard.FormHeader { title: i18n("Notes") }
+    FormCard.FormCard {
+        id: notesCard
+        property var notes: AppController.notes("", "", taskPage.taskId)
+        Connections {
+            target: AppController
+            function onChanged(tables) { if (tables.indexOf("notes") >= 0) notesCard.notes = AppController.notes("", "", taskPage.taskId) }
+        }
+        Repeater {
+            model: notesCard.notes
+            FormCard.FormButtonDelegate {
+                required property var modelData
+                icon.name: "view-pim-notes"
+                text: modelData.title
+                description: modelData.snippet.replace(/<[^>]+>/g, "")
+                onClicked: applicationWindow().openNote(modelData.id, true)
+            }
+        }
+        FormCard.FormButtonDelegate {
+            icon.name: "list-add"
+            text: i18n("Add a note")
+            onClicked: {
+                const id = AppController.createNote({ title: taskPage.detail.title, taskId: taskPage.taskId })
+                if (id)
+                    applicationWindow().openNote(id, true)
             }
         }
     }

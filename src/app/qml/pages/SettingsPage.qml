@@ -61,7 +61,7 @@ FormCard.FormCardPage {
         }
         FormCard.FormSwitchDelegate {
             visible: aiCard.a.provider === "anthropic"
-            text: i18n("Include task notes")
+            text: i18n("Include task details")
             description: i18n("Off: only titles, times and priorities leave this computer")
             checked: aiCard.a.shareNotes
             onToggled: AppController.setSetting("ai_share_notes", checked)

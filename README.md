@@ -4,12 +4,15 @@ A local, single-user desktop rebuild of [Task Tumbler](../task-tumbler): energy-
 
 The architecture and roadmap are in `../task-tumbler/docs/desktop-model.md`.
 
-## Status: Phase 4 (connected)
+## Status: Phase 4 (connected) + notes
+
+- **Notes** (Ctrl+6): markdown notes with a live preview, tags, a colour, and an optional link to a task. They're searchable as you type (every word, matched as a prefix, title matches first) and can be exported as `.md`. They save themselves as you type, and deleting one can be undone. A task's page lists its notes and can start one. The task field formerly called "Notes" is now "Details".
+
 
 - **Linear:** issues assigned to you come in as tasks (Todo and In Progress, optionally Backlog, optionally only some teams), with a button to open the issue. Finishing one here moves it to the team's Done state in Linear within seconds. Issues completed, cancelled or reassigned in Linear are closed here. Deleting a Linear task here keeps it deleted. The personal API key is kept in the keyring.
 - **Calendar subscriptions:** any `.ics` address (Google's secret iCal address, Nextcloud/CalDAV subscription links, Outlook published calendars, `webcal://`) or a local file. Repeats, exceptions, time zones and "show as free" are handled by KCalendarCore. Events show on the schedule and keep tasks out of busy times (per-calendar blocking mode); they're read-only here.
 - **Sync:** every 15 minutes, shortly after start, and on demand. A remote change overwrites a linked task's title, notes, priority and due date only if the remote item actually changed, so local edits stand until then. Sync changes aren't on the undo stack.
-- **Not done (by choice):** Google OAuth (Google Tasks, writing to Google Calendar), Trello, notes UI, stats and the map view.
+- **Not done (by choice):** Google OAuth (Google Tasks, writing to Google Calendar), Trello, stats and the map view.
 
 Phase 3b (phone companion):
 
@@ -72,7 +75,7 @@ Phase 1:
 - Snapshot-based undo for any change.
 - SQLite storage and migrations, and the web-app importer.
 
-**Tests:** 18 suites. They cover the core, plus the app controller driven the way the QML drives it.
+**Tests:** 19 suites. They cover the core, plus the app controller driven the way the QML drives it.
 
 ## Build and run
 

@@ -864,6 +864,41 @@ private slots:
         QVERIFY(hub.state().value("feeds").toList().isEmpty());
     }
 
+    void notesFromTheUi()
+    {
+        const QString task = m_app->createTask({{"title", "Plan the trip"}});
+        const QString id = m_app->createNote({{"title", "Packing <list>"}, {"taskId", task}, {"tags", QStringList{"travel"}}});
+        QVERIFY(!id.isEmpty());
+        QCOMPARE(m_app->undoText(), QStringLiteral("Add note “Packing <list>”"));
+
+        // Typing saves without piling up undo steps.
+        QVERIFY(m_app->saveNote(id, {{"content", "passport & charger"}}));
+        QVERIFY(m_app->saveNote(id, {{"content", "passport & charger, adapter"}}));
+        QCOMPARE(m_app->undoText(), QStringLiteral("Add note “Packing <list>”"));
+
+        const QVariantList hits = m_app->notes("charg");
+        QCOMPARE(hits.size(), 1);
+        // The user's text is escaped; only the match markers become markup.
+        QCOMPARE(hits.first().toMap().value("snippet").toString(), QStringLiteral("passport &amp; <b>charger</b>, adapter"));
+        QCOMPARE(m_app->notes().first().toMap().value("title").toString(), QStringLiteral("Packing <list>"));
+        QCOMPARE(m_app->notes({}, {}, task).size(), 1);
+        QCOMPARE(m_app->noteDetail(id).value("taskTitle").toString(), QStringLiteral("Plan the trip"));
+        QCOMPARE(m_app->noteTags(), QStringList({"travel"}));
+        QVERIFY(m_app->noteTaskChoices().size() >= 1);
+
+        QTemporaryDir dir;
+        QVERIFY(m_app->exportNote(id, QUrl::fromLocalFile(dir.filePath("packing.md"))));
+        QFile f(dir.filePath("packing.md"));
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(f.readAll(), QByteArray("# Packing <list>\n\nTags: travel\n\npassport & charger, adapter"));
+
+        QVERIFY(m_app->deleteNote(id));
+        QVERIFY(m_app->notes().isEmpty());
+        m_app->undo();
+        QCOMPARE(m_app->noteDetail(id).value("content").toString(), QStringLiteral("passport & charger, adapter"));
+        QCOMPARE(m_app->notes("adapter").size(), 1);
+    }
+
     void importFromOnboarding()
     {
         Database fresh(QStringLiteral("fresh"));

@@ -30,6 +30,7 @@ AI tests use `tests/fakeserver.h` (a local HTTP server); never call the real API
 - `src/core/sync.*`: the sync rules as plain database logic: pull tasks/events, close what vanished, tombstones for tasks deleted here, completions to push. Migration 002 makes `synced_items.task_id` ON DELETE SET NULL for the tombstones.
 - `src/sync/`: `tumbler-sync`, the service clients: `linear.*` (GraphQL, personal key, no "Bearer") and `icsfeed.*` (KCalendarCore expansion, fetching). They fetch and translate only.
 - `src/app/sync/synchub.*`: the third QML singleton, `SyncHub`. It runs the timers, reads the keyring (only once Linear is connected), and drives Settings → Linear and Calendars. Sync writes go through `AppController::applyExternal`, outside the undo stack.
+- `src/core/notes.*`: notes over the FTS5 table from 001 (`ftsQuery` turns typing into a safe prefix query; snippets mark matches with \x02/\x03 and the controller turns them into `<b>`). Note edits save through `applyExternal` (not undoable per keystroke); create and delete are undoable.
 - `src/cli/`: command-line tools.
 - `resources/migrations/NNN_name.sql`: schema migrations, embedded as `:/migrations` and applied by `Database::migrate()` using `PRAGMA user_version`. Never edit a migration that has shipped; add a new numbered file and list it in `src/core/CMakeLists.txt`.
 - `tests/`: Qt Test, one `tst_*.cpp` per area, registered in `tests/CMakeLists.txt`. Fixtures live in `tests/fixtures/`.

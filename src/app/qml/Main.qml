@@ -24,7 +24,8 @@ Kirigami.ApplicationWindow {
             categories: categoriesPage,
             settings: settingsPage,
             onboarding: onboardingPage,
-            energy: energyPage
+            energy: energyPage,
+            notes: notesPage
         }
         if (name === "unfocus") {
             AppController.focusMode = false
@@ -49,6 +50,11 @@ Kirigami.ApplicationWindow {
             editEvent(name === "event:new" ? "" : name.slice(6))
             return
         }
+        if (name.startsWith("note:")) {
+            showPage("notes")
+            openNote(name.slice(5))
+            return
+        }
         if (name.startsWith("task:")) {
             showPage("tasks")
             openTask(name.slice(5))
@@ -68,6 +74,15 @@ Kirigami.ApplicationWindow {
         while (pageStack.depth > 1)
             pageStack.pop()
         pageStack.push(taskDetailPage, { taskId: taskId })
+    }
+
+    // From the notes list: replaces any open note. From a task: opens beside it.
+    function openNote(noteId, besideTask) {
+        if (!noteId)
+            return
+        while (pageStack.depth > (besideTask ? 2 : 1))
+            pageStack.pop()
+        pageStack.push(noteEditorPage, { noteId: noteId })
     }
 
     function openCapture() {
@@ -130,6 +145,13 @@ Kirigami.ApplicationWindow {
                 checked: root.currentPage === "energy"
                 shortcut: "Ctrl+5"
                 onTriggered: root.showPage("energy")
+            },
+            Kirigami.Action {
+                text: i18n("Notes")
+                icon.name: "view-pim-notes"
+                checked: root.currentPage === "notes"
+                shortcut: "Ctrl+6"
+                onTriggered: root.showPage("notes")
             },
             Kirigami.Action {
                 text: i18n("Categories")
@@ -310,6 +332,14 @@ Kirigami.ApplicationWindow {
     Component {
         id: energyPage
         EnergyPage {}
+    }
+    Component {
+        id: notesPage
+        NotesPage { onOpenNote: noteId => root.openNote(noteId) }
+    }
+    Component {
+        id: noteEditorPage
+        NoteEditorPage { onOpenTask: taskId => root.openTask(taskId) }
     }
     Component {
         id: taskDetailPage

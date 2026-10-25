@@ -157,6 +157,19 @@ public:
     Q_INVOKABLE QString saveEvent(const QVariantMap &event);
     Q_INVOKABLE bool deleteEvent(const QString &id);
 
+    // Notes (appcontroller_notes.cpp). Lists: [{id, title, snippet (rich
+    // text, matches in bold), tags, color, taskId, taskTitle, updatedAt}].
+    Q_INVOKABLE QVariantList notes(const QString &search = {}, const QString &tag = {}, const QString &taskId = {}) const;
+    Q_INVOKABLE QStringList noteTags() const;
+    Q_INVOKABLE QVariantMap noteDetail(const QString &id) const;
+    Q_INVOKABLE QString createNote(const QVariantMap &fields = {});
+    // Saves as you type: not undoable step by step (the text box has its own undo).
+    Q_INVOKABLE bool saveNote(const QString &id, const QVariantMap &fields);
+    Q_INVOKABLE bool deleteNote(const QString &id);
+    Q_INVOKABLE bool exportNote(const QString &id, const QUrl &file);
+    // Open tasks a note can be about: [{id, title}] by title.
+    Q_INVOKABLE QVariantList noteTaskChoices() const;
+
     Q_INVOKABLE void setApiKey(const QString &key);
     Q_INVOKABLE void testAi();
     Q_INVOKABLE void refreshOllamaModels();
