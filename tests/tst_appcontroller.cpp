@@ -2,6 +2,7 @@
 #include "desktop/dbusapi.h"
 #include "keystore.h"
 #include "remotehub.h"
+#include "synchub.h"
 #include "fakeserver.h"
 #include "tasklistmodel.h"
 
@@ -11,6 +12,7 @@
 #include <QSignalSpy>
 #include <QSqlQuery>
 #include <QTest>
+#include <QFile>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTemporaryDir>
@@ -770,6 +772,96 @@ private slots:
 
         m_app->setSetting("remote_enabled", false);
         QVERIFY(!hub.state().value("running").toBool());
+    }
+
+    void syncHubLinearEndToEnd()
+    {
+        FakeServer server;
+        FakeKeyStore keys;
+        SyncHub hub(m_app.get(), &keys);
+        hub.setLinearEndpoint(server.url());
+
+        server.reply(200, {{"data", QJsonObject{{"viewer", QJsonObject{{"name", "April"}}},
+                                                {"teams", QJsonObject{{"nodes", QJsonArray{QJsonObject{{"key", "ENG"}, {"name", "Engineering"}}}}}}}}});
+        const QJsonObject issue{{"id", "uuid-1"}, {"title", "Ship it"}, {"priority", 2}, {"url", "https://linear.app/a/issue/ENG-1"},
+                                {"state", QJsonObject{{"type", "started"}}}, {"team", QJsonObject{{"key", "ENG"}}},
+                                {"labels", QJsonObject{{"nodes", QJsonArray()}}}};
+        const QJsonObject page{{"data", QJsonObject{{"issues", QJsonObject{{"nodes", QJsonArray{issue}},
+                                                                            {"pageInfo", QJsonObject{{"hasNextPage", false}}}}}}}};
+        server.reply(200, page);
+
+        QSignalSpy finished(&hub, &SyncHub::syncFinished);
+        hub.connectLinear("  lin_api_123  ");
+        QTRY_COMPARE(finished.size(), 1);
+        QCOMPARE(keys.writes, QStringList({"linear-api-key"}));
+        QCOMPARE(server.requests.first().headers.value("authorization"), QStringLiteral("lin_api_123"));
+        const QVariantMap linear = hub.state().value("linear").toMap();
+        QCOMPARE(linear.value("user").toString(), QStringLiteral("April"));
+        QVERIFY2(linear.value("error").toString().isEmpty(), qPrintable(linear.value("error").toString()));
+
+        const QVariantList found = m_app->externalTasks("open", "Ship it");
+        QCOMPARE(found.size(), 1);
+        const QString taskId = found.first().toMap().value("id").toString();
+        QCOMPARE(m_app->taskDetail(taskId).value("priority").toString(), QStringLiteral("high"));
+
+        // Done here: the next sync tells Linear (look up states, then update).
+        QVERIFY(m_app->setTaskStatus(taskId, "completed"));
+        server.reply(200, page); // still open there
+        server.reply(200, {{"data", QJsonObject{{"issue", QJsonObject{
+                                                              {"state", QJsonObject{{"type", "started"}}},
+                                                              {"team", QJsonObject{{"states", QJsonObject{{"nodes", QJsonArray{
+                                                                  QJsonObject{{"id", "s-done"}, {"type", "completed"}, {"position", 1}}}}}}}}}}}}});
+        server.reply(200, {{"data", QJsonObject{{"issueUpdate", QJsonObject{{"success", true}}}}}});
+        hub.syncNow();
+        QTRY_COMPARE(server.requests.size(), 5); // viewer, pull, pull, states, update
+        QCOMPARE(server.requests.last().body.value("variables").toObject().value("stateId").toString(), QStringLiteral("s-done"));
+        QTRY_COMPARE(scalar(*m_db, "SELECT sync_status FROM synced_items").toString(), QStringLiteral("done_pushed"));
+        QCOMPARE(m_app->taskDetail(taskId).value("status").toString(), QStringLiteral("completed"));
+
+        hub.disconnectLinear();
+        QVERIFY(!hub.state().value("linear").toMap().value("enabled").toBool());
+        QCOMPARE(keys.writes.size(), 2); // the key was removed again
+    }
+
+    void syncHubCalendarFeed()
+    {
+        QTemporaryDir dir;
+        const QDate tomorrow = QDate::currentDate().addDays(1);
+        const QString stamp = tomorrow.toString("yyyyMMdd");
+        QFile ics(dir.filePath("work.ics"));
+        QVERIFY(ics.open(QIODevice::WriteOnly));
+        ics.write("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//EN\r\nBEGIN:VEVENT\r\nUID:m1\r\nSUMMARY:Planning\r\nDTSTART:" + stamp.toLatin1()
+                  + "T140000Z\r\nDTEND:" + stamp.toLatin1() + "T150000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        ics.close();
+
+        FakeKeyStore keys;
+        SyncHub hub(m_app.get(), &keys);
+        QSignalSpy added(&hub, &SyncHub::feedAdded);
+        QSignalSpy failed(&hub, &SyncHub::feedFailed);
+        hub.addFeed({{"name", "Work"}, {"url", ics.fileName()}, {"color", "#ff0000"}, {"blocking", "block_all"}});
+        QTRY_COMPARE(added.size(), 1);
+        QCOMPARE(failed.size(), 0);
+        QVERIFY(keys.reads.isEmpty()); // calendars never touch the keyring
+        const QString feedId = added.first().first().toString();
+        QCOMPARE(hub.state().value("feeds").toList().first().toMap().value("count").toInt(), 1);
+
+        const QString eventId = scalar(*m_db, "SELECT id FROM events WHERE title = 'Planning'").toString();
+        QVERIFY(!eventId.isEmpty());
+        QCOMPARE(m_app->eventDetail(eventId).value("feed").toString(), QStringLiteral("Work"));
+        // Read-only here.
+        QVERIFY(m_app->saveEvent({{"id", eventId}, {"title", "Mine now"}}).isEmpty());
+        QVERIFY(!m_app->deleteEvent(eventId));
+
+        hub.addFeed({{"url", dir.filePath("nope.ics")}});
+        QTRY_COMPARE(failed.size(), 1);
+
+        hub.updateFeed(feedId, {{"enabled", false}});
+        QCOMPARE(scalar(*m_db, "SELECT COUNT(*) FROM events").toInt(), 0);
+        hub.updateFeed(feedId, {{"enabled", true}});
+        QTRY_COMPARE(scalar(*m_db, "SELECT COUNT(*) FROM events").toInt(), 1);
+        hub.removeFeed(feedId);
+        QCOMPARE(scalar(*m_db, "SELECT COUNT(*) FROM events").toInt(), 0);
+        QVERIFY(hub.state().value("feeds").toList().isEmpty());
     }
 
     void importFromOnboarding()

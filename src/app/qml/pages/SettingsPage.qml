@@ -98,6 +98,124 @@ FormCard.FormCardPage {
         }
     }
 
+    FormCard.FormHeader { title: i18n("Linear") }
+    FormCard.FormCard {
+        id: linearCard
+        readonly property var l: SyncHub.state.linear || ({})
+        readonly property var teamKeys: linearCard.l.teamKeys || []
+
+        FormCard.FormTextDelegate {
+            visible: !linearCard.l.enabled
+            text: i18n("Issues assigned to you, as tasks")
+            description: i18n("Finishing one here marks it done in Linear. Make a personal API key in Linear: Settings → Security & access → Personal API keys.")
+        }
+        FormCard.FormPasswordFieldDelegate {
+            id: linearKey
+            visible: !linearCard.l.enabled
+            label: i18n("Personal API key")
+            placeholderText: "lin_api_…"
+            onAccepted: if (text.trim()) { SyncHub.connectLinear(text); text = "" }
+        }
+        FormCard.FormButtonDelegate {
+            visible: !linearCard.l.enabled
+            enabled: linearKey.text.trim() !== ""
+            icon.name: "network-connect"
+            text: i18n("Connect")
+            onClicked: { SyncHub.connectLinear(linearKey.text); linearKey.text = "" }
+        }
+
+        FormCard.FormTextDelegate {
+            visible: !!linearCard.l.enabled
+            text: i18n("Connected as %1", linearCard.l.user || "?")
+            description: linearCard.l.error
+                         || (linearCard.l.lastSync ? i18n("%1 · synced at %2", linearCard.l.summary, Qt.formatTime(new Date(linearCard.l.lastSync), Qt.locale().timeFormat(Locale.ShortFormat)))
+                                                   : (SyncHub.state.syncing ? i18n("Syncing…") : i18n("Not synced yet")))
+            descriptionItem.color: linearCard.l.error ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.disabledTextColor
+        }
+        Repeater {
+            model: linearCard.l.enabled ? (linearCard.l.teams || []) : []
+            FormCard.FormCheckDelegate {
+                required property var modelData
+                text: i18n("%1 (%2)", modelData.name, modelData.key)
+                description: linearCard.teamKeys.length === 0 ? i18n("All teams are synced until you pick some") : ""
+                checked: linearCard.teamKeys.length === 0 || linearCard.teamKeys.indexOf(modelData.key) >= 0
+                onToggled: {
+                    let keys = linearCard.teamKeys.length === 0 ? (linearCard.l.teams || []).map(t => t.key) : linearCard.teamKeys.slice()
+                    if (checked && keys.indexOf(modelData.key) < 0) keys.push(modelData.key)
+                    if (!checked) keys = keys.filter(k => k !== modelData.key)
+                    SyncHub.setLinearTeams(keys)
+                }
+            }
+        }
+        FormCard.FormSwitchDelegate {
+            visible: !!linearCard.l.enabled
+            text: i18n("Include backlog")
+            description: i18n("Off: only Todo and In Progress issues")
+            checked: !!linearCard.l.includeBacklog
+            onToggled: SyncHub.setLinearBacklog(checked)
+        }
+        FormCard.FormButtonDelegate {
+            visible: !!linearCard.l.enabled
+            enabled: !SyncHub.state.syncing
+            icon.name: "view-refresh"
+            text: SyncHub.state.syncing ? i18n("Syncing…") : i18n("Sync now")
+            onClicked: SyncHub.syncNow()
+        }
+        FormCard.FormButtonDelegate {
+            visible: !!linearCard.l.enabled
+            icon.name: "network-disconnect"
+            text: i18n("Disconnect")
+            description: i18n("Tasks already brought in stay")
+            onClicked: SyncHub.disconnectLinear()
+        }
+    }
+
+    FormCard.FormHeader { title: i18n("Calendars") }
+    FormCard.FormCard {
+        id: feedsCard
+        Repeater {
+            model: SyncHub.state.feeds || []
+            FormCard.FormSwitchDelegate {
+                required property var modelData
+                text: modelData.name
+                description: (modelData.error ? "⚠ " + modelData.error : "")
+                             || (modelData.lastSync ? i18np("1 event in the next two months", "%1 events in the next two months", modelData.count)
+                                                    : (modelData.enabled ? i18n("Not synced yet") : i18n("Off")))
+                checked: modelData.enabled
+                onToggled: SyncHub.updateFeed(modelData.id, { enabled: checked })
+                leading: Rectangle {
+                    implicitWidth: Kirigami.Units.gridUnit * 0.8
+                    implicitHeight: implicitWidth
+                    radius: width / 2
+                    color: modelData.color
+                }
+                trailing: Controls.ToolButton {
+                    icon.name: "list-remove"
+                    text: i18n("Unsubscribe")
+                    display: Controls.AbstractButton.IconOnly
+                    onClicked: SyncHub.removeFeed(modelData.id)
+                    Controls.ToolTip.text: text
+                    Controls.ToolTip.visible: hovered
+                    Controls.ToolTip.delay: Kirigami.Units.toolTipDelay
+                }
+            }
+        }
+        FormCard.FormButtonDelegate {
+            icon.name: "list-add"
+            text: i18n("Subscribe to a calendar…")
+            description: (SyncHub.state.feeds || []).length === 0 ? i18n("Its events show on your schedule and keep tasks out of busy times. Read-only; refreshed every 15 minutes.") : ""
+            onClicked: feedDialog.start()
+        }
+        FormCard.FormButtonDelegate {
+            visible: (SyncHub.state.feeds || []).length > 0
+            enabled: !SyncHub.state.syncing
+            icon.name: "view-refresh"
+            text: SyncHub.state.syncing ? i18n("Syncing…") : i18n("Refresh now")
+            onClicked: SyncHub.syncNow()
+        }
+    }
+    FeedDialog { id: feedDialog }
+
     FormCard.FormHeader { title: i18n("Phone") }
     FormCard.FormCard {
         id: phoneCard

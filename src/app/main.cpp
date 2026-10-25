@@ -12,6 +12,7 @@
 #include "mcpserver.h"
 #include "keystore.h"
 #include "remote/remotehub.h"
+#include "sync/synchub.h"
 
 #include <KAboutData>
 #include <KDBusService>
@@ -115,6 +116,12 @@ int main(int argc, char *argv[])
     RemoteHub hub(&controller, sandboxed ? QDir::tempPath() + QStringLiteral("/tumbler-remote-%1.json").arg(QCoreApplication::applicationPid())
                                          : RemoteHub::defaultSecretsPath());
     RemoteHub::setInstance(&hub);
+    // Linear and calendar subscriptions. In screenshot mode nothing syncs on
+    // its own and the keyring is a stub that holds nothing.
+    NullKeyStore noKeys;
+    SyncHub syncHub(&controller, sandboxed ? &noKeys : &keys);
+    SyncHub::setInstance(&syncHub);
+    syncHub.setAutomatic(!sandboxed);
     controller.dailyBackup();
 
     QQmlApplicationEngine engine;

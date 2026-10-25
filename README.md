@@ -4,7 +4,14 @@ A local, single-user desktop rebuild of [Task Tumbler](../task-tumbler): energy-
 
 The architecture and roadmap are in `../task-tumbler/docs/desktop-model.md`.
 
-## Status: Phase 3b (phone companion)
+## Status: Phase 4 (connected)
+
+- **Linear:** issues assigned to you come in as tasks (Todo and In Progress, optionally Backlog, optionally only some teams), with a button to open the issue. Finishing one here moves it to the team's Done state in Linear within seconds. Issues completed, cancelled or reassigned in Linear are closed here. Deleting a Linear task here keeps it deleted. The personal API key is kept in the keyring.
+- **Calendar subscriptions:** any `.ics` address (Google's secret iCal address, Nextcloud/CalDAV subscription links, Outlook published calendars, `webcal://`) or a local file. Repeats, exceptions, time zones and "show as free" are handled by KCalendarCore. Events show on the schedule and keep tasks out of busy times (per-calendar blocking mode); they're read-only here.
+- **Sync:** every 15 minutes, shortly after start, and on demand. A remote change overwrites a linked task's title, notes, priority and due date only if the remote item actually changed, so local edits stand until then. Sync changes aren't on the undo stack.
+- **Not done (by choice):** Google OAuth (Google Tasks, writing to Google Calendar), Trello, notes UI, stats and the map view.
+
+Phase 3b (phone companion):
 
 - **On your phone, over your tailnet:** Today with Start / Done / Later / +15, Ready to Work, the running timer, an energy check-in, and quick capture with a live preview. Captures made while the computer is asleep wait on the phone and are sent later, without duplicates.
 - **Notifications with buttons on Android:** Done, +15 min, Later, Skip. They go to the phone when you're away from the computer (idle or screen locked), or always, or never, as you choose in Settings.
@@ -65,11 +72,11 @@ Phase 1:
 - Snapshot-based undo for any change.
 - SQLite storage and migrations, and the web-app importer.
 
-**Tests:** 16 suites. They cover the core, plus the app controller driven the way the QML drives it.
+**Tests:** 18 suites. They cover the core, plus the app controller driven the way the QML drives it.
 
 ## Build and run
 
-Requires Qt ≥ 6.8 (with Network and DBus), KDE Frameworks ≥ 6.8 (Kirigami, KirigamiAddons, I18n, CoreAddons, DBusAddons, Notifications, StatusNotifierItem, GlobalAccel, KIO, Service, IdleTime), QtKeychain, OpenSSL 3, KDE Prison (QR codes, runtime), CMake ≥ 3.20 and a C++20 compiler. `-DBUILD_APP=OFF` builds only the core, the CLI and the core tests.
+Requires Qt ≥ 6.8 (with Network and DBus), KDE Frameworks ≥ 6.8 (Kirigami, KirigamiAddons, I18n, CoreAddons, DBusAddons, Notifications, StatusNotifierItem, GlobalAccel, KIO, Service, IdleTime), QtKeychain, OpenSSL 3, KCalendarCore, KDE Prison (QR codes, runtime), CMake ≥ 3.20 and a C++20 compiler. `-DBUILD_APP=OFF` builds only the core, the CLI and the core tests.
 
 ```bash
 cmake -S . -B build -G Ninja

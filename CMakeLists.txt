@@ -18,8 +18,9 @@ add_subdirectory(src/core)
 add_subdirectory(src/ai)
 if(BUILD_APP)
     add_subdirectory(src/mcp)
+    add_subdirectory(src/remote) # OpenSSL
+    add_subdirectory(src/sync)   # KCalendarCore
 endif()
-add_subdirectory(src/remote)
 add_subdirectory(src/cli)
 
 if(BUILD_APP)

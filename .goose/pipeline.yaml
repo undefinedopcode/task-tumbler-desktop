@@ -8,7 +8,7 @@ steps:
       name: Build and test
       docker_image: archlinux:latest
       command: >-
-        pacman -Syu --noconfirm --needed base-devel cmake ninja extra-cmake-modules qt6-base qt6-declarative kirigami kirigami-addons ki18n kcoreaddons kdbusaddons knotifications kstatusnotifieritem kglobalaccel kio kservice kidletime qtkeychain-qt6 openssl prison &&
+        pacman -Syu --noconfirm --needed base-devel cmake ninja extra-cmake-modules qt6-base qt6-declarative kirigami kirigami-addons ki18n kcoreaddons kdbusaddons knotifications kstatusnotifieritem kglobalaccel kio kservice kidletime qtkeychain-qt6 openssl prison kcalendarcore &&
         cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release &&
         cmake --build build &&
         ctest --test-dir build --output-on-failure

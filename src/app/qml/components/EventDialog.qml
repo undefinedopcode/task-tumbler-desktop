@@ -10,6 +10,8 @@ FormCard.FormCardDialog {
     id: eventDialog
 
     property var event: ({})
+    // From a subscribed calendar: shown, not edited (the next sync would undo it).
+    readonly property bool readOnly: !!event.feed
     readonly property var swatches: ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#ec4899", "#a855f7", "#64748b"]
     readonly property var modes: [
         { value: "none", text: i18n("Anything can be scheduled") },
@@ -49,10 +51,12 @@ FormCard.FormCardDialog {
         return d
     }
 
-    title: event.id ? i18n("Edit event") : i18n("New event")
-    standardButtons: Controls.Dialog.Save | Controls.Dialog.Cancel
+    title: readOnly ? event.title : (event.id ? i18n("Edit event") : i18n("New event"))
+    standardButtons: readOnly ? Controls.Dialog.Close : (Controls.Dialog.Save | Controls.Dialog.Cancel)
 
     onAccepted: {
+        if (readOnly)
+            return
         const e = Object.assign({}, event, {
             title: titleField.text,
             location: locationField.text,
@@ -62,18 +66,21 @@ FormCard.FormCardDialog {
     }
 
     FormCard.FormTextFieldDelegate {
+        enabled: !eventDialog.readOnly
         id: titleField
         label: i18n("What")
         placeholderText: i18n("Physio, school run, flight…")
     }
     FormCard.FormDelegateSeparator {}
     FormCard.FormSwitchDelegate {
+        enabled: !eventDialog.readOnly
         text: i18n("All day")
         checked: !!eventDialog.event.allDay
         onToggled: eventDialog.event = Object.assign({}, eventDialog.event, { allDay: checked })
     }
     FormCard.FormDelegateSeparator {}
     FormCard.FormDateTimeDelegate {
+        enabled: !eventDialog.readOnly
         text: i18n("Date")
         dateTimeDisplay: FormCard.FormDateTimeDelegate.DateTimeDisplay.Date
         value: Format.parseDate(eventDialog.event.date)
@@ -88,6 +95,7 @@ FormCard.FormCardDialog {
         }
     }
     FormCard.FormDateTimeDelegate {
+        enabled: !eventDialog.readOnly
         visible: !eventDialog.event.allDay
         text: i18n("Starts")
         dateTimeDisplay: FormCard.FormDateTimeDelegate.DateTimeDisplay.Time
@@ -99,6 +107,7 @@ FormCard.FormCardDialog {
         }
     }
     FormCard.FormDateTimeDelegate {
+        enabled: !eventDialog.readOnly
         visible: !eventDialog.event.allDay
         text: i18n("Ends")
         dateTimeDisplay: FormCard.FormDateTimeDelegate.DateTimeDisplay.Time
@@ -110,6 +119,7 @@ FormCard.FormCardDialog {
         }
     }
     FormCard.FormDateTimeDelegate {
+        enabled: !eventDialog.readOnly
         visible: !!eventDialog.event.allDay
         text: i18n("Until")
         dateTimeDisplay: FormCard.FormDateTimeDelegate.DateTimeDisplay.Date
@@ -122,6 +132,7 @@ FormCard.FormCardDialog {
     }
     FormCard.FormDelegateSeparator {}
     FormCard.FormComboBoxDelegate {
+        enabled: !eventDialog.readOnly
         text: i18n("During it")
         model: eventDialog.modes
         textRole: "text"
@@ -130,6 +141,7 @@ FormCard.FormCardDialog {
         onActivated: eventDialog.event = Object.assign({}, eventDialog.event, { blockingMode: currentValue })
     }
     FormCard.FormTextFieldDelegate {
+        enabled: !eventDialog.readOnly
         id: tagsField
         visible: eventDialog.event.blockingMode === "tags_only"
         label: i18n("Allowed tags")
@@ -137,10 +149,12 @@ FormCard.FormCardDialog {
     }
     FormCard.FormDelegateSeparator {}
     FormCard.FormTextFieldDelegate {
+        enabled: !eventDialog.readOnly
         id: locationField
         label: i18n("Where (optional)")
     }
     FormCard.AbstractFormDelegate {
+        enabled: !eventDialog.readOnly
         background: null
         contentItem: Flow {
             spacing: Kirigami.Units.smallSpacing
@@ -160,7 +174,8 @@ FormCard.FormCardDialog {
         }
     }
     FormCard.FormButtonDelegate {
-        visible: !!eventDialog.event.id
+        enabled: !eventDialog.readOnly
+        visible: !!eventDialog.event.id && !eventDialog.readOnly
         text: i18n("Delete event")
         icon.name: "edit-delete"
         onClicked: {

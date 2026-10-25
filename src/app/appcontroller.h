@@ -206,6 +206,12 @@ public:
 
     qint64 now() const;
 
+    // Changes from a sync: applied and shown, but not on the undo stack
+    // (undoing them would just be redone by the next sync).
+    bool applyExternal(const Mutation &mutation, QString *error = nullptr);
+    // The name of the subscribed calendar an event comes from, if any.
+    QString feedNameOf(const QString &eventId) const;
+
 Q_SIGNALS:
     void changed(const QStringList &tables);
     void todayChanged();

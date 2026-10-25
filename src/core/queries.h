@@ -53,6 +53,7 @@ public:
 
     QJsonValue setting(const QString &key, const QJsonValue &fallback = {}) const;
     bool isEmpty() const; // no tasks and no categories
+    QSqlDatabase db() const { return m_db; }
 
 private:
     QSqlDatabase m_db;

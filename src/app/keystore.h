@@ -19,4 +19,17 @@ public:
     virtual void write(const QString &key, const QString &value, std::function<void(const QString &error)> done);
 };
 
+// Holds nothing and never touches the keyring (screenshot mode).
+class NullKeyStore : public KeyStore
+{
+    Q_OBJECT
+public:
+    using KeyStore::KeyStore;
+    void read(const QString &, std::function<void(const QString &, const QString &)> done) override { done({}, {}); }
+    void write(const QString &, const QString &, std::function<void(const QString &)> done) override
+    {
+        done(QStringLiteral("no keyring in this mode"));
+    }
+};
+
 } // namespace tumbler

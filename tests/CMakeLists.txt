@@ -15,6 +15,7 @@ tumbler_add_test(tst_timeparse)
 tumbler_add_test(tst_database)
 tumbler_add_test(tst_importer)
 tumbler_add_test(tst_operations)
+tumbler_add_test(tst_sync)
 tumbler_add_test(tst_planner)
 tumbler_add_test(tst_capture)
 tumbler_add_test(tst_reminders)
@@ -29,11 +30,12 @@ if(BUILD_APP)
         ${APP_DIR}/appcontroller_desktop.cpp ${APP_DIR}/appcontroller_external.cpp
         ${APP_DIR}/desktop/dbusapi.h ${APP_DIR}/desktop/dbusapi.cpp
         ${APP_DIR}/remote/remotehub.h ${APP_DIR}/remote/remotehub.cpp
+        ${APP_DIR}/sync/synchub.h ${APP_DIR}/sync/synchub.cpp
         ${APP_DIR}/keystore.h ${APP_DIR}/keystore.cpp
         ${APP_DIR}/tasklistmodel.h ${APP_DIR}/tasklistmodel.cpp
         ${APP_DIR}/variants.h ${APP_DIR}/variants.cpp)
-    target_include_directories(tst_appcontroller PRIVATE ${APP_DIR} ${APP_DIR}/remote)
-    target_link_libraries(tst_appcontroller PRIVATE tumbler-core tumbler-ai tumbler-remote Qt6Keychain::Qt6Keychain KF6::Service Qt6::DBus Qt6::Test Qt6::Gui Qt6::Qml)
+    target_include_directories(tst_appcontroller PRIVATE ${APP_DIR} ${APP_DIR}/remote ${APP_DIR}/sync)
+    target_link_libraries(tst_appcontroller PRIVATE tumbler-core tumbler-ai tumbler-remote tumbler-sync Qt6Keychain::Qt6Keychain KF6::Service Qt6::DBus Qt6::Test Qt6::Gui Qt6::Qml)
 
     qt_add_executable(tst_mcp tst_mcp.cpp)
     target_link_libraries(tst_mcp PRIVATE tumbler-mcp Qt6::Test)
@@ -46,6 +48,12 @@ qt_add_executable(tst_ai tst_ai.cpp)
 target_link_libraries(tst_ai PRIVATE tumbler-ai Qt6::Test)
 add_test(NAME tst_ai COMMAND tst_ai)
 
-qt_add_executable(tst_remote tst_remote.cpp)
-target_link_libraries(tst_remote PRIVATE tumbler-remote Qt6::Test)
-add_test(NAME tst_remote COMMAND tst_remote)
+if(BUILD_APP)
+    qt_add_executable(tst_remote tst_remote.cpp)
+    target_link_libraries(tst_remote PRIVATE tumbler-remote Qt6::Test)
+    add_test(NAME tst_remote COMMAND tst_remote)
+
+    qt_add_executable(tst_syncclients tst_syncclients.cpp)
+    target_link_libraries(tst_syncclients PRIVATE tumbler-sync Qt6::Test)
+    add_test(NAME tst_syncclients COMMAND tst_syncclients)
+endif()

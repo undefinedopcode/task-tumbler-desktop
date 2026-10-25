@@ -27,6 +27,9 @@ AI tests use `tests/fakeserver.h` (a local HTTP server); never call the real API
   - `webpush.*`: RFC 8291 encryption and VAPID signing, with OpenSSL.
   - `web/`: the phone app (vanilla JS PWA, embedded as `:/remote/web`).
 - `src/app/remote/remotehub.*`: implements that backend over AppController. It's the second QML singleton, `RemoteHub`, which drives the Settings → Phone section. Secrets live in `~/.config/task-tumbler/remote.json` (0600).
+- `src/core/sync.*`: the sync rules as plain database logic: pull tasks/events, close what vanished, tombstones for tasks deleted here, completions to push. Migration 002 makes `synced_items.task_id` ON DELETE SET NULL for the tombstones.
+- `src/sync/`: `tumbler-sync`, the service clients: `linear.*` (GraphQL, personal key, no "Bearer") and `icsfeed.*` (KCalendarCore expansion, fetching). They fetch and translate only.
+- `src/app/sync/synchub.*`: the third QML singleton, `SyncHub`. It runs the timers, reads the keyring (only once Linear is connected), and drives Settings → Linear and Calendars. Sync writes go through `AppController::applyExternal`, outside the undo stack.
 - `src/cli/`: command-line tools.
 - `resources/migrations/NNN_name.sql`: schema migrations, embedded as `:/migrations` and applied by `Database::migrate()` using `PRAGMA user_version`. Never edit a migration that has shipped; add a new numbered file and list it in `src/core/CMakeLists.txt`.
 - `tests/`: Qt Test, one `tst_*.cpp` per area, registered in `tests/CMakeLists.txt`. Fixtures live in `tests/fixtures/`.
@@ -44,6 +47,8 @@ AI tests use `tests/fakeserver.h` (a local HTTP server); never call the real API
 - Every behaviour change from the web app gets a test and a row in the README's "intentionally differs" table.
 - QML combo boxes: set `currentIndex` from a computed index, not `indexOfValue()`, which returns -1 in bindings until the model loads.
 - Tests that run a server pick a free port at runtime, never a fixed one.
+- Sync is tested against `tests/fakeserver.h` and local `.ics` files, never the real Linear API or real calendars. In screenshot mode SyncHub gets a `NullKeyStore` and never syncs on its own.
+- `tumbler::Event` and `KCalendarCore::Event` clash: always qualify the KCalendarCore one.
 - Phone UI checks: headless Firefox with a throwaway profile (`firefox --headless -no-remote -profile <scratch> --screenshot …`) against a sandboxed instance (`TUMBLER_SHOT_DELAY=30000`, `remote_enabled` set in a scratch DB).
 - The phone app's CSP forbids inline styles: set colours through `element.style`, never `style=""`.
 - The keyring is only opened when Claude is the selected provider (opening a closed KWallet prompts).

@@ -5,6 +5,7 @@
 #include "keystore.h"
 #include "operations.h"
 #include "provider.h"
+#include "sync.h"
 #include "variants.h"
 
 #include <QCryptographicHash>
@@ -527,13 +528,31 @@ QVariantMap AppController::eventDetail(const QString &id) const
         {QStringLiteral("allowedTags"), e->blocking.allowedTags},
         {QStringLiteral("color"), e->color},
         {QStringLiteral("location"), e->location},
+        // From a subscribed calendar: read-only here, changed at the source.
+        {QStringLiteral("feed"), feedNameOf(e->id)},
     };
+}
+
+QString AppController::feedNameOf(const QString &eventId) const
+{
+    const QString feedId = sync::feedOf(queries(), eventId);
+    if (feedId.isEmpty())
+        return {};
+    for (const QJsonValue &f : queries().setting(QStringLiteral("calendar_feeds"), QJsonArray()).toArray()) {
+        if (f.toObject().value(QLatin1String("id")).toString() == feedId)
+            return f.toObject().value(QLatin1String("name")).toString();
+    }
+    return QStringLiteral("a subscribed calendar");
 }
 
 QString AppController::saveEvent(const QVariantMap &v)
 {
     Event e;
     e.id = v.value(QStringLiteral("id")).toString();
+    if (const QString feed = e.id.isEmpty() ? QString() : feedNameOf(e.id); !feed.isEmpty()) {
+        Q_EMIT message(QStringLiteral("That event comes from “%1”; change it there").arg(feed));
+        return {};
+    }
     const bool isNew = e.id.isEmpty();
     if (isNew)
         e.id = newId();
@@ -577,6 +596,10 @@ bool AppController::deleteEvent(const QString &id)
     const auto e = queries().event(id);
     if (!e)
         return false;
+    if (const QString feed = feedNameOf(id); !feed.isEmpty()) {
+        Q_EMIT message(QStringLiteral("That event comes from “%1”; remove it there").arg(feed));
+        return false;
+    }
     Mutation m = ops::deleteEvent(id);
     m.text = QStringLiteral("Delete event “%1”").arg(e->title);
     const bool ok = apply(m);

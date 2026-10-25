@@ -18,6 +18,7 @@ qt_add_library(tumbler-core STATIC
     captureparser.h captureparser.cpp
     reminderplan.h reminderplan.cpp
     dayplanner.h dayplanner.cpp
+    sync.h sync.cpp
 )
 
 qt_add_resources(tumbler-core "migrations"
@@ -25,6 +26,7 @@ qt_add_resources(tumbler-core "migrations"
     BASE "${PROJECT_SOURCE_DIR}/resources"
     FILES
         ${PROJECT_SOURCE_DIR}/resources/migrations/001_initial.sql
+        ${PROJECT_SOURCE_DIR}/resources/migrations/002_sync_links.sql
 )
 
 target_include_directories(tumbler-core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

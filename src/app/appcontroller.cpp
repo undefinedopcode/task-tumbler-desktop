@@ -151,6 +151,16 @@ bool AppController::apply(const std::optional<Mutation> &mutation, const QString
     return true;
 }
 
+bool AppController::applyExternal(const Mutation &mutation, QString *error)
+{
+    auto applied = MutationRunner(m_db.handle()).run(mutation, error);
+    if (!applied)
+        return false;
+    if (!applied->isNoop())
+        refresh(applied->tables());
+    return true;
+}
+
 bool AppController::revertApplied(const AppliedMutation &applied)
 {
     QString error;
