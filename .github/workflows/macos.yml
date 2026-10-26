@@ -1,0 +1,46 @@
+# Keeps the macOS build honest: builds the app and runs the tests on an
+# Apple Silicon runner. The KDE libraries are built once and cached.
+name: macOS
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Homebrew packages
+        run: brew install qt qtkeychain openssl@3 libical gettext qrencode zxing-cpp ninja
+
+      - name: Cache key
+        id: key
+        run: echo "qt=$(brew list --versions qt | tr ' ' '-')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache KDE libraries
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/kde-deps
+          key: kde-deps-${{ steps.key.outputs.qt }}-${{ hashFiles('.github/scripts/build-kde-deps.sh') }}
+
+      - name: Build KDE libraries
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: .github/scripts/build-kde-deps.sh "$HOME/kde-deps"
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix qt);$HOME/kde-deps;$(brew --prefix)" \
+            -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
