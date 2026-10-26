@@ -40,6 +40,11 @@ build frameworks/kstatusnotifieritem "$KF_VERSION"
 build frameworks/kirigami "$KF_VERSION"
 build frameworks/kguiaddons "$KF_VERSION" -DWITH_WAYLAND=OFF -DWITH_X11=OFF
 build frameworks/kcolorscheme "$KF_VERSION"
+build frameworks/kcrash "$KF_VERSION"
+build frameworks/karchive "$KF_VERSION"
+build frameworks/kwidgetsaddons "$KF_VERSION"
+# Bundling the Breeze icons comes with packaging the .app.
+build frameworks/kiconthemes "$KF_VERSION" -DUSE_BreezeIcons=OFF
 build libraries/kirigami-addons "$ADDONS_VERSION"
 build frameworks/kcalendarcore "$KF_VERSION"
 build frameworks/prison "$KF_VERSION"
