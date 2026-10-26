@@ -38,6 +38,8 @@ build frameworks/kwindowsystem "$KF_VERSION"
 build frameworks/knotifications "$KF_VERSION"
 build frameworks/kstatusnotifieritem "$KF_VERSION"
 build frameworks/kirigami "$KF_VERSION"
+build frameworks/kguiaddons "$KF_VERSION" -DWITH_WAYLAND=OFF -DWITH_X11=OFF
+build frameworks/kcolorscheme "$KF_VERSION"
 build libraries/kirigami-addons "$ADDONS_VERSION"
 build frameworks/kcalendarcore "$KF_VERSION"
 build frameworks/prison "$KF_VERSION"
