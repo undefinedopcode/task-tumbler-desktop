@@ -29,11 +29,33 @@ if(BUILD_APP)
     list(APPEND CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
     include(KDEInstallDirs)
 
-    find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Gui Widgets Qml Quick QuickControls2 DBus)
-    find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
-        Kirigami CoreAddons I18n Notifications StatusNotifierItem GlobalAccel KIO Service IdleTime)
+    find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Gui Widgets Qml Quick QuickControls2)
+    find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS Kirigami CoreAddons I18n Notifications StatusNotifierItem)
     find_package(KF6KirigamiAddons 1.0 REQUIRED)
     find_package(Qt6Keychain REQUIRED)
+
+    # The few things each desktop does its own way (src/app/desktop/*_linux.cpp
+    # and *_mac.cpp): opening apps, idle time, the global shortcut, login items.
+    set(APP_DESKTOP ${PROJECT_SOURCE_DIR}/src/app/desktop)
+    if(APPLE)
+        set(TUMBLER_PLATFORM mac)
+        set(TUMBLER_PLATFORM_SOURCES
+            ${APP_DESKTOP}/apps_mac.cpp ${APP_DESKTOP}/presence_mac.cpp ${APP_DESKTOP}/hotkey_mac.cpp
+            ${APP_DESKTOP}/idlewatch_mac.cpp ${APP_DESKTOP}/autostart_mac.cpp)
+        set(TUMBLER_PLATFORM_LIBRARIES "-framework Carbon" "-framework CoreGraphics" "-framework CoreFoundation")
+        set(TUMBLER_PLATFORM_DEFINITIONS "")
+    else()
+        # Plus the session bus: scripts, KRunner and Do Not Disturb.
+        find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS DBus)
+        find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS GlobalAccel KIO Service IdleTime)
+        set(TUMBLER_PLATFORM linux)
+        set(TUMBLER_PLATFORM_SOURCES
+            ${APP_DESKTOP}/apps_linux.cpp ${APP_DESKTOP}/presence_linux.cpp ${APP_DESKTOP}/hotkey_linux.cpp
+            ${APP_DESKTOP}/idlewatch_linux.cpp ${APP_DESKTOP}/autostart_linux.cpp
+            ${APP_DESKTOP}/focusguard.h ${APP_DESKTOP}/focusguard.cpp ${APP_DESKTOP}/krunner.h ${APP_DESKTOP}/krunner.cpp)
+        set(TUMBLER_PLATFORM_LIBRARIES Qt6::DBus KF6::KIOGui KF6::Service KF6::IdleTime KF6::GlobalAccel)
+        set(TUMBLER_PLATFORM_DEFINITIONS TUMBLER_HAVE_DBUS)
+    endif()
 
     add_subdirectory(src/app)
 endif()

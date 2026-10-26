@@ -251,7 +251,11 @@ void RemoteHub::detectTailscale()
         proc->deleteLater();
         Q_EMIT m_app->message(QStringLiteral("Tailscale isn't installed"));
     });
-    proc->start(QStringLiteral("tailscale"), {QStringLiteral("status"), QStringLiteral("--json")});
+    // On a Mac the app store build keeps its CLI inside the app.
+    QString tailscale = QStandardPaths::findExecutable(QStringLiteral("tailscale"));
+    if (tailscale.isEmpty() && QFile::exists(QStringLiteral("/Applications/Tailscale.app/Contents/MacOS/Tailscale")))
+        tailscale = QStringLiteral("/Applications/Tailscale.app/Contents/MacOS/Tailscale");
+    proc->start(tailscale.isEmpty() ? QStringLiteral("tailscale") : tailscale, {QStringLiteral("status"), QStringLiteral("--json")});
 }
 
 void RemoteHub::sendTest()

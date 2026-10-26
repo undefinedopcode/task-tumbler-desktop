@@ -9,7 +9,7 @@ class AppController;
 
 // Opens what a task's launchers point at, when AppController asks. All the
 // decisions (which actions, whether a command is approved) are made there;
-// this only executes, through KIO so apps start the desktop's way.
+// this only executes, the desktop's way (apps.h).
 class Launcher : public QObject
 {
     Q_OBJECT

@@ -80,11 +80,11 @@ Phase 1:
 - Snapshot-based undo for any change.
 - SQLite storage and migrations, and the web-app importer.
 
-**Tests:** 19 suites. They cover the core, plus the app controller driven the way the QML drives it.
+**Tests:** 22 suites. They cover the core, plus the app controller driven the way the QML drives it.
 
 ## Build and run
 
-Requires Qt ≥ 6.8 (with Network and DBus), KDE Frameworks ≥ 6.8 (Kirigami, KirigamiAddons, I18n, CoreAddons, Notifications, StatusNotifierItem, GlobalAccel, KIO, Service, IdleTime), QtKeychain, OpenSSL 3, KCalendarCore, KDE Prison (QR codes, runtime), CMake ≥ 3.20 and a C++20 compiler. `-DBUILD_APP=OFF` builds only the core, the CLI and the core tests.
+Requires Qt ≥ 6.8 (with Network, and DBus on Linux), KDE Frameworks ≥ 6.8 (Kirigami, KirigamiAddons, I18n, CoreAddons, Notifications, StatusNotifierItem, and on Linux GlobalAccel, KIO, Service, IdleTime), QtKeychain, OpenSSL 3, KCalendarCore, KDE Prison (QR codes, runtime), CMake ≥ 3.20 and a C++20 compiler. `-DBUILD_APP=OFF` builds only the core, the CLI and the core tests.
 
 ```bash
 cmake -S . -B build -G Ninja
@@ -93,6 +93,8 @@ ctest --test-dir build --output-on-failure
 ./build/src/app/task-tumbler                 # uses ~/.local/share/task-tumbler/tumbler.db
 ./build/src/app/task-tumbler --db /tmp/t.db  # a separate test database, runs alongside
 ```
+
+**macOS (in progress):** it builds against Homebrew's Qt plus a handful of KDE libraries that Homebrew doesn't package; `.github/scripts/build-kde-deps.sh ~/kde-deps` builds them, then configure with `-DCMAKE_PREFIX_PATH="$(brew --prefix qt);$HOME/kde-deps;$(brew --prefix)"`. The `macOS` GitHub Actions workflow does the same and runs the tests. On a Mac there's no KRunner or Do Not Disturb while focusing, quick capture is ⌘⇧Space, and start at login is a LaunchAgent. There's no `.app` bundle yet.
 
 `task-tumbler --capture` opens quick capture (in the running instance if there is one). `--hidden` starts in the tray.
 

@@ -3,11 +3,14 @@
 #include "desktop/autostart.h"
 #include "desktop/reminders.h"
 #include "desktop/externalapi.h"
-#include "desktop/focusguard.h"
+#include "desktop/hotkey.h"
 #include "desktop/idlewatch.h"
-#include "desktop/krunner.h"
 #include "desktop/launcher.h"
 #include "desktop/tray.h"
+#ifdef TUMBLER_HAVE_DBUS
+#include "desktop/focusguard.h"
+#include "desktop/krunner.h"
+#endif
 #include "ipc.h"
 #include "mcpserver.h"
 #include "socketbackend.h"
@@ -16,13 +19,14 @@
 #include "sync/synchub.h"
 
 #include <KAboutData>
-#include <KGlobalAccel>
 #include <KLocalizedQmlContext>
 #include <KLocalizedString>
 #include <QAction>
 #include <QApplication>
 #include <QCommandLineParser>
+#ifdef TUMBLER_HAVE_DBUS
 #include <QDBusConnection>
+#endif
 #include <QDir>
 #include <QFile>
 #include <QIcon>
@@ -80,8 +84,11 @@ int main(int argc, char *argv[])
     QApplication::setWindowIcon(
         QIcon::fromTheme(QStringLiteral("org.kde.tasktumbler"), QIcon(QStringLiteral(":/icons/org.kde.tasktumbler.svg"))));
 
+#ifndef Q_OS_MACOS
+    // Plasma's own look. On macOS Kirigami picks its style itself.
     if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE"))
         QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
+#endif
 
     QCommandLineParser parser;
     about.setupCommandLine(&parser);
@@ -162,12 +169,10 @@ int main(int argc, char *argv[])
     std::unique_ptr<Tray> tray;
     std::unique_ptr<Reminders> reminders;
     std::unique_ptr<IdleWatch> idle;
-    std::unique_ptr<FocusGuard> focus;
     if (!sandboxed) {
         tray = std::make_unique<Tray>(&controller, window);
         reminders = std::make_unique<Reminders>(&controller, &hub);
         idle = std::make_unique<IdleWatch>(&controller);
-        focus = std::make_unique<FocusGuard>(&controller);
     }
     Launcher launcher(&controller);
     ExternalApi api(&controller);
@@ -177,6 +182,11 @@ int main(int argc, char *argv[])
         if (!socket.listen(socketPath, &socketError))
             qWarning("Not listening for other apps: %s", qPrintable(socketError));
     }
+#ifdef TUMBLER_HAVE_DBUS
+    // Do Not Disturb while focusing, scripts on the session bus, and KRunner.
+    std::unique_ptr<FocusGuard> focus;
+    if (!sandboxed)
+        focus = std::make_unique<FocusGuard>(&controller);
     KRunnerApi runner(&controller);
     if (dbArg.isEmpty() && !sandboxed) {
         // The test instance (--db) stays off the bus so it can't be mistaken for the real one.
@@ -184,12 +194,13 @@ int main(int argc, char *argv[])
         api.registerOnBus();
         runner.registerOnBus();
     }
+#endif
 
-    // Global quick-capture hotkey, rebindable in System Settings > Shortcuts.
+    // Global quick-capture hotkey.
     QAction captureAction(i18n("Quick Capture"));
     captureAction.setObjectName(QStringLiteral("quick_capture"));
     if (!sandboxed)
-        KGlobalAccel::self()->setGlobalShortcut(&captureAction, QKeySequence(Qt::META | Qt::SHIFT | Qt::Key_Space));
+        registerGlobalShortcut(&captureAction);
     QObject::connect(&captureAction, &QAction::triggered, &controller, &AppController::showCaptureRequested);
 
     QObject::connect(&socket, &ipc::Server::activateRequested, &controller, [&controller](const QStringList &args) {
@@ -220,7 +231,9 @@ int main(int argc, char *argv[])
         const bool wanted = controller.settings().value(QStringLiteral("autostart")).toBool();
         if (wanted != isAutostartEnabled())
             setAutostart(wanted);
+#ifdef TUMBLER_HAVE_DBUS
         KRunnerApi::setPluginInstalled(controller.settings().value(QStringLiteral("krunner")).toBool());
+#endif
     };
     if (!sandboxed) {
         QObject::connect(&controller, &AppController::settingsChanged, &controller, syncDesktopFiles);

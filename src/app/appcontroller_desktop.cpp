@@ -3,10 +3,9 @@
 // whether a command may run.
 
 #include "appcontroller.h"
+#include "desktop/apps.h"
 #include "operations.h"
 
-#include <KApplicationTrader>
-#include <KService>
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QFileInfo>
@@ -91,9 +90,9 @@ QVariantMap AppController::actionToVariant(const TaskAction &a) const
         label = QFileInfo(a.target).fileName();
         break;
     case TaskAction::Kind::App: {
-        const KService::Ptr service = KService::serviceByDesktopName(a.target);
-        icon = service ? service->icon() : QStringLiteral("application-x-executable");
-        label = service ? service->name() : a.target;
+        const auto app = apps::find(a.target);
+        icon = app ? app->icon : QStringLiteral("application-x-executable");
+        label = app ? app->name : a.target;
         break;
     }
     case TaskAction::Kind::Command: {
@@ -193,12 +192,8 @@ void AppController::launchForTask(const QString &taskId)
 QVariantList AppController::installedApps() const
 {
     QVariantList out;
-    const KService::List apps = KApplicationTrader::query([](const KService::Ptr &s) { return !s->noDisplay(); });
-    for (const KService::Ptr &s : apps) {
-        out.append(QVariantMap{{QStringLiteral("id"), s->desktopEntryName()},
-                               {QStringLiteral("name"), s->name()},
-                               {QStringLiteral("icon"), s->icon()}});
-    }
+    for (const apps::App &a : apps::installed())
+        out.append(QVariantMap{{QStringLiteral("id"), a.id}, {QStringLiteral("name"), a.name}, {QStringLiteral("icon"), a.icon}});
     std::sort(out.begin(), out.end(), [](const QVariant &a, const QVariant &b) {
         return a.toMap().value(QStringLiteral("name")).toString().compare(b.toMap().value(QStringLiteral("name")).toString(),
                                                                          Qt::CaseInsensitive)

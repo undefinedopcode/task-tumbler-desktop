@@ -2,10 +2,10 @@
 
 #include "appcontroller.h"
 
-#include <KIdleTime>
 #include <KLocalizedString>
 #include <KNotification>
 #include <QDateTime>
+#include <algorithm>
 
 namespace tumbler {
 
@@ -13,23 +13,25 @@ IdleWatch::IdleWatch(AppController *app, QObject *parent)
     : QObject(parent)
     , m_app(app)
 {
-    KIdleTime *idle = KIdleTime::instance();
-    connect(idle, &KIdleTime::timeoutReached, this, [this](int id, int msec) {
-        if (id != m_timeoutId || m_app->working().isEmpty())
-            return;
-        m_since = QDateTime::currentMSecsSinceEpoch() - msec;
-        KIdleTime::instance()->catchNextResumeEvent();
-    });
-    connect(idle, &KIdleTime::resumingFromIdle, this, [this] {
-        if (m_since == 0)
-            return;
-        m_app->reportAway(m_since, QDateTime::currentMSecsSinceEpoch());
-        m_since = 0;
-        if (!m_app->away().isEmpty())
-            notifyReturn();
-    });
+    startNoticing();
     connect(app, &AppController::settingsChanged, this, &IdleWatch::configure);
     configure();
+}
+
+void IdleWatch::wentAway(qint64 since)
+{
+    if (m_since == 0 && !m_app->working().isEmpty())
+        m_since = since;
+}
+
+void IdleWatch::cameBack(qint64 at)
+{
+    if (m_since == 0)
+        return;
+    m_app->reportAway(m_since, at);
+    m_since = 0;
+    if (!m_app->away().isEmpty())
+        notifyReturn();
 }
 
 void IdleWatch::configure()
@@ -38,9 +40,7 @@ void IdleWatch::configure()
     if (minutes == m_minutes)
         return;
     m_minutes = minutes;
-    if (m_timeoutId >= 0)
-        KIdleTime::instance()->removeIdleTimeout(m_timeoutId);
-    m_timeoutId = minutes > 0 ? KIdleTime::instance()->addIdleTimeout(minutes * 60 * 1000) : -1;
+    watchFor(std::max(0, minutes));
 }
 
 void IdleWatch::notifyReturn()

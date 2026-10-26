@@ -1,10 +1,8 @@
 #include "launcher.h"
 
 #include "appcontroller.h"
+#include "apps.h"
 
-#include <KIO/ApplicationLauncherJob>
-#include <KIO/OpenUrlJob>
-#include <KService>
 #include <QProcess>
 #include <QUrl>
 
@@ -27,24 +25,9 @@ void Launcher::open(const QVariantMap &action)
     };
 
     if (kind == QLatin1String("url") || kind == QLatin1String("file")) {
-        auto *job = new KIO::OpenUrlJob(kind == QLatin1String("file") ? QUrl::fromLocalFile(target) : QUrl(target));
-        connect(job, &KJob::result, this, [job, failed] {
-            if (job->error())
-                failed(job->errorString());
-        });
-        job->start();
+        apps::openUrl(kind == QLatin1String("file") ? QUrl::fromLocalFile(target) : QUrl(target), this, failed);
     } else if (kind == QLatin1String("app")) {
-        const KService::Ptr service = KService::serviceByDesktopName(target);
-        if (!service) {
-            failed(QStringLiteral("that app isn't installed"));
-            return;
-        }
-        auto *job = new KIO::ApplicationLauncherJob(service);
-        connect(job, &KJob::result, this, [job, failed] {
-            if (job->error())
-                failed(job->errorString());
-        });
-        job->start();
+        apps::launch(target, this, failed);
     } else if (kind == QLatin1String("command")) {
         // argv straight to the program: no shell.
         QStringList argv = action.value(QStringLiteral("argv")).toStringList();

@@ -6,15 +6,18 @@ qt_add_executable(task-tumbler
     variants.h variants.cpp
     desktop/reminders.h desktop/reminders.cpp
     desktop/tray.h desktop/tray.cpp
-    desktop/autostart.h desktop/autostart.cpp
+    desktop/autostart.h
     desktop/launcher.h desktop/launcher.cpp
     desktop/idlewatch.h desktop/idlewatch.cpp
-    desktop/focusguard.h desktop/focusguard.cpp
     desktop/externalapi.h desktop/externalapi.cpp
-    desktop/krunner.h desktop/krunner.cpp
+    desktop/apps.h desktop/presence.h desktop/hotkey.h
     remote/remotehub.h remote/remotehub.cpp
     sync/synchub.h sync/synchub.cpp
 )
+
+# What differs between desktops: TUMBLER_PLATFORM_SOURCES and _LIBRARIES
+# come from the top-level CMakeLists.txt.
+target_sources(task-tumbler PRIVATE ${TUMBLER_PLATFORM_SOURCES})
 
 # Must precede qt_add_qml_module to take effect.
 set_source_files_properties(qml/components/Format.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
@@ -70,12 +73,11 @@ target_link_libraries(task-tumbler PRIVATE
     tumbler-remote
     tumbler-sync
     Qt6Keychain::Qt6Keychain
-    KF6::KIOGui KF6::Service KF6::IdleTime
-    Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::DBus
-    KF6::CoreAddons KF6::I18n KF6::I18nQml KF6::Notifications KF6::StatusNotifierItem KF6::GlobalAccel
+    Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::QuickControls2
+    KF6::CoreAddons KF6::I18n KF6::I18nQml KF6::Notifications KF6::StatusNotifierItem
+    ${TUMBLER_PLATFORM_LIBRARIES}
 )
-
-target_compile_definitions(task-tumbler PRIVATE TUMBLER_HAVE_DBUS)
+target_compile_definitions(task-tumbler PRIVATE ${TUMBLER_PLATFORM_DEFINITIONS})
 
 # Running from the build tree: KNotification looks for the notifyrc under
 # $XDG_DATA_DIRS/knotifications6, so stage a copy and point the app at it.

@@ -1,16 +1,13 @@
 #include "reminders.h"
 
 #include "appcontroller.h"
+#include "presence.h"
 #include "remote/remotehub.h"
 #include "reminderplan.h"
 #include "today.h"
 
 #include <KLocalizedString>
-#include <KIdleTime>
 #include <KNotification>
-#include <QDBusConnection>
-#include <QDBusInterface>
-#include <QDBusReply>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QDateTime>
@@ -131,12 +128,7 @@ void Reminders::nudgeCloseOut(bool desktop, bool phone)
 bool Reminders::userAway() const
 {
     // Away: no input for a few minutes, or the screen is locked.
-    if (KIdleTime::instance()->idleTime() >= 3 * kMinute)
-        return true;
-    QDBusInterface saver(QStringLiteral("org.freedesktop.ScreenSaver"), QStringLiteral("/ScreenSaver"),
-                         QStringLiteral("org.freedesktop.ScreenSaver"), QDBusConnection::sessionBus());
-    const QDBusReply<bool> locked = saver.call(QStringLiteral("GetActive"));
-    return locked.isValid() && locked.value();
+    return presence::away(3);
 }
 
 void Reminders::pushToPhone(const QString &event, const QString &title, const QString &text, const AgendaItem &item, bool missed)

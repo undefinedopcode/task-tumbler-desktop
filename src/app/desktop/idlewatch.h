@@ -2,6 +2,8 @@
 
 #include <QObject>
 
+class QTimer;
+
 namespace tumbler {
 
 class AppController;
@@ -18,11 +20,18 @@ public:
 private:
     void configure();
     void notifyReturn();
+    // How each platform notices (idlewatch_linux.cpp, idlewatch_mac.cpp):
+    // they call wentAway() and cameBack().
+    void startNoticing();
+    void watchFor(int minutes); // 0: stop
+    void wentAway(qint64 since);
+    void cameBack(qint64 at);
 
     AppController *m_app;
-    int m_timeoutId = -1;
     int m_minutes = -1;
     qint64 m_since = 0;
+    int m_timeoutId = -1;      // Linux: KIdleTime's
+    QTimer *m_poll = nullptr; // macOS: polling the idle time
 };
 
 } // namespace tumbler

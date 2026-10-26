@@ -11,6 +11,7 @@ FormCard.FormCardPage {
     id: page
 
     readonly property var s: AppController.settings
+    readonly property bool mac: Qt.platform.os === "osx"
     property string importReport: ""
 
     title: i18n("Settings")
@@ -362,7 +363,7 @@ FormCard.FormCardPage {
     FormCard.FormHeader { title: i18n("Window") }
     FormCard.FormCard {
         FormCard.FormSwitchDelegate {
-            text: i18n("Keep running in the system tray when closed")
+            text: page.mac ? i18n("Keep running in the menu bar when closed") : i18n("Keep running in the system tray when closed")
             description: i18n("Reminders only work while Task Tumbler is running")
             checked: page.s.closeToTray
             onToggled: AppController.setSetting("close_to_tray", checked)
@@ -370,14 +371,15 @@ FormCard.FormCardPage {
         FormCard.FormDelegateSeparator {}
         FormCard.FormSwitchDelegate {
             text: i18n("Start at login")
-            description: i18n("Starts quietly in the tray")
+            description: page.mac ? i18n("Starts quietly in the menu bar") : i18n("Starts quietly in the tray")
             checked: page.s.autostart
             onToggled: AppController.setSetting("autostart", checked)
         }
         FormCard.FormDelegateSeparator {}
         FormCard.FormTextDelegate {
             text: i18n("Quick capture from anywhere")
-            description: i18n("Meta+Shift+Space by default; change it in System Settings → Shortcuts → Task Tumbler")
+            description: page.mac ? i18n("⌘⇧Space")
+                                  : i18n("Meta+Shift+Space by default; change it in System Settings → Shortcuts → Task Tumbler")
         }
     }
 
@@ -397,12 +399,14 @@ FormCard.FormCardPage {
     FormCard.FormCard {
         FormCard.FormSwitchDelegate {
             text: i18n("Let other apps change tasks")
-            description: i18n("Scripts, KRunner and AI agents (through MCP) can add, finish and schedule tasks. Reading is always allowed. Changes can be undone here.")
+            description: page.mac ? i18n("AI agents (through MCP) can add, finish and schedule tasks. Reading is always allowed. Changes can be undone here.")
+                                  : i18n("Scripts, KRunner and AI agents (through MCP) can add, finish and schedule tasks. Reading is always allowed. Changes can be undone here.")
             checked: page.s.externalWrites
             onToggled: AppController.setSetting("external_writes", checked)
         }
-        FormCard.FormDelegateSeparator {}
+        FormCard.FormDelegateSeparator { visible: !page.mac }
         FormCard.FormSwitchDelegate {
+            visible: !page.mac // KRunner is Plasma's
             text: i18n("Show in KRunner")
             description: i18n("Alt+Space, then “tt call mum tomorrow” to capture, or type a task's name to start or finish it")
             checked: page.s.krunner
