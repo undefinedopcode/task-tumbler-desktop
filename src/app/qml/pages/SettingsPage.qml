@@ -460,6 +460,51 @@ FormCard.FormCardPage {
         }
     }
 
+    FormCard.FormHeader { title: i18n("Winding down") }
+    FormCard.FormCard {
+        FormCard.FormSwitchDelegate {
+            id: closeOutSwitch
+            text: i18n("Nudge me to close out the day")
+            description: i18n("A note on Today (and a notification) once the evening comes, until you've closed out.")
+            checked: page.s.closeOutTime !== ""
+            onToggled: AppController.setSetting("closeout_time", checked ? "17:30" : "")
+        }
+        FormCard.FormDelegateSeparator { visible: closeOutSwitch.checked }
+        FormCard.FormTextFieldDelegate {
+            visible: closeOutSwitch.checked
+            label: i18n("From (HH:MM)")
+            text: page.s.closeOutTime
+            validator: RegularExpressionValidator { regularExpression: /^([01]?\d|2[0-3]):[0-5]\d$/ }
+            // Stored zero-padded: the controller reads it as HH:mm.
+            onEditingFinished: {
+                if (!acceptableInput)
+                    return
+                const value = text.length === 4 ? "0" + text : text
+                if (value !== page.s.closeOutTime)
+                    AppController.setSetting("closeout_time", value)
+            }
+        }
+        FormCard.FormDelegateSeparator {}
+        FormCard.FormComboBoxDelegate {
+            text: i18n("Weekly review")
+            description: i18n("Shown on Today from this day until you've done it.")
+            textRole: "text"
+            valueRole: "value"
+            model: [
+                { text: i18n("Off"), value: -1 },
+                { text: Qt.locale().dayName(0), value: 0 },
+                { text: Qt.locale().dayName(1), value: 1 },
+                { text: Qt.locale().dayName(2), value: 2 },
+                { text: Qt.locale().dayName(3), value: 3 },
+                { text: Qt.locale().dayName(4), value: 4 },
+                { text: Qt.locale().dayName(5), value: 5 },
+                { text: Qt.locale().dayName(6), value: 6 }
+            ]
+            Component.onCompleted: currentIndex = indexOfValue(page.s.reviewWeekday)
+            onActivated: AppController.setSetting("review_weekday", currentValue)
+        }
+    }
+
     FormCard.FormHeader { title: i18n("Your data") }
     FormCard.FormCard {
         FormCard.FormTextDelegate {

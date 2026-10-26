@@ -63,6 +63,7 @@ QString sizeOf(int estimate)
 
 struct FinishedTask {
     QString id;
+    QString title;
     int estimate;
     QString categoryId;
     qint64 doneAt;
@@ -74,14 +75,14 @@ QList<FinishedTask> finishedTasks(const Queries &q, qint64 start, qint64 end)
 {
     QList<FinishedTask> out;
     QSqlQuery f = run(q.db(),
-                      QStringLiteral("SELECT t.id, t.time_estimate_minutes, t.category_id, COALESCE(MAX(h.at), t.updated_at) AS done_at "
+                      QStringLiteral("SELECT t.id, t.title, t.time_estimate_minutes, t.category_id, COALESCE(MAX(h.at), t.updated_at) AS done_at "
                                      "FROM tasks t LEFT JOIN task_history h ON h.task_id = t.id AND h.action = 'completed' "
                                      " AND (h.details IS NULL OR json_extract(h.details, '$.occurrence_date') IS NULL) "
                                      "WHERE t.status = 'completed' AND t.recurrence IS NULL "
                                      "GROUP BY t.id HAVING done_at >= ? AND done_at < ?"),
                       {start, end});
     while (f.next())
-        out.append({f.value(0).toString(), f.value(1).toInt(), f.value(2).toString(), f.value(3).toLongLong()});
+        out.append({f.value(0).toString(), f.value(1).toString(), f.value(2).toInt(), f.value(3).toString(), f.value(4).toLongLong()});
     return out;
 }
 
@@ -176,6 +177,7 @@ Summary summarize(const Queries &q, QDate from, QDate to, const QTimeZone &zone)
     QHash<QString, QList<Sample>> byCategory;
     for (const FinishedTask &f : finishedTasks(q, start, end)) {
         ++s.finishedTasks;
+        s.finished.append(Finished{f.id, f.title, f.doneAt, false});
         auto day = days.find(dayOf(f.doneAt));
         if (day != days.end())
             ++day->finished;
@@ -191,11 +193,12 @@ Summary summarize(const Queries &q, QDate from, QDate to, const QTimeZone &zone)
     }
 
     QSqlQuery o = run(q.db(),
-                      QStringLiteral("SELECT completed_at FROM task_occurrences "
-                                     "WHERE status = 'completed' AND completed_at >= ? AND completed_at < ?"),
+                      QStringLiteral("SELECT o.completed_at, o.task_id, t.title FROM task_occurrences o JOIN tasks t ON t.id = o.task_id "
+                                     "WHERE o.status = 'completed' AND o.completed_at >= ? AND o.completed_at < ?"),
                       {start, end});
     while (o.next()) {
         ++s.finishedRoutines;
+        s.finished.append(Finished{o.value(1).toString(), o.value(2).toString(), o.value(0).toLongLong(), true});
         auto day = days.find(dayOf(o.value(0).toLongLong()));
         if (day != days.end())
             ++day->finished;
@@ -232,6 +235,9 @@ Summary summarize(const Queries &q, QDate from, QDate to, const QTimeZone &zone)
     while (m.next())
         s.moving.append(Moving{m.value(0).toString(), m.value(1).toString(), m.value(2).toInt()});
 
+    std::sort(s.finished.begin(), s.finished.end(), [](const Finished &a, const Finished &b) {
+        return a.at != b.at ? a.at < b.at : a.title < b.title;
+    });
     for (QDate d = s.from; d <= s.to; d = d.addDays(1))
         s.days.append(days.value(d));
     return s;

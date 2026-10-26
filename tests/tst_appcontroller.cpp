@@ -670,6 +670,100 @@ private slots:
         QVERIFY(!m_app->stats(7).value("paceActive").toBool());
     }
 
+    void closeOutLeftovers()
+    {
+        const auto blockOf = [this](const QString &taskId) {
+            const QList<ScheduleBlock> blocks = m_app->queries().schedulesForTask(taskId);
+            return blocks.isEmpty() ? QString() : blocks.first().id;
+        };
+        QStringList ids;
+        for (const char *title : {"Pile", "Drop", "Tomorrow", "Rest"}) {
+            const QString id = m_app->createTask({{"title", title}, {"time_estimate_minutes", 30}});
+            QVERIFY(m_app->scheduleAt(id, m_app->now() - (ids.size() + 2) * 3600000LL, 30));
+            ids.append(id);
+        }
+        QCOMPARE(m_app->closeOut().value("leftovers").toList().size(), 4);
+
+        QVERIFY(m_app->resolveLeftover("block", blockOf(ids[0]), "pile"));
+        QVERIFY(blockOf(ids[0]).isEmpty());
+        QCOMPARE(m_app->queries().task(ids[0])->status, TaskStatus::Pending);
+
+        QVERIFY(m_app->resolveLeftover("block", blockOf(ids[1]), "drop"));
+        QCOMPARE(m_app->queries().task(ids[1])->status, TaskStatus::Cancelled);
+        QVERIFY(blockOf(ids[1]).isEmpty());
+        m_app->undo(); // one step puts both back
+        QCOMPARE(m_app->queries().task(ids[1])->status, TaskStatus::Pending);
+        QVERIFY(!blockOf(ids[1]).isEmpty());
+        m_app->redo();
+
+        QVERIFY(m_app->resolveLeftover("block", blockOf(ids[2]), "tomorrow"));
+        const QDate tomorrow = QDateTime::currentDateTime().date().addDays(1);
+        QVERIFY(m_app->queries().schedule(blockOf(ids[2]))->start >= QDateTime(tomorrow, QTime(0, 0)).toMSecsSinceEpoch());
+
+        const QVariantList left = m_app->closeOut().value("leftovers").toList();
+        QCOMPARE(left.size(), 1);
+        QCOMPARE(left[0].toMap().value("taskId").toString(), ids[3]);
+        QVERIFY(m_app->clearLeftovers());
+        QVERIFY(m_app->closeOut().value("leftovers").toList().isEmpty());
+        QCOMPARE(m_app->undoText(), QStringLiteral("Clear the rest of the day"));
+        m_app->undo();
+        QCOMPARE(m_app->closeOut().value("leftovers").toList().size(), 1);
+        QVERIFY(!m_app->resolveLeftover("block", blockOf(ids[3]), "nonsense"));
+    }
+
+    void closeOutNoteAndNudges()
+    {
+        QVERIFY(m_app->saveDayNote("   ").isEmpty()); // nothing written, nothing made
+        const QString id = m_app->saveDayNote("Walk helped");
+        QVERIFY(!id.isEmpty());
+        QCOMPARE(m_app->saveDayNote("Walk helped a lot"), id); // the same note all day
+        QCOMPARE(m_app->closeOut().value("note").toString(), QStringLiteral("Walk helped a lot"));
+        QCOMPARE(m_app->notes({}, "day").size(), 1);
+        QVERIFY(!m_app->canUndo()); // typing isn't undo history
+
+        m_app->setSetting("closeout_time", "00:00");
+        QVERIFY(m_app->today().value("closeOutDue").toBool());
+        m_app->finishCloseOut(true);
+        QVERIFY(!m_app->today().value("closeOutDue").toBool());
+        QVERIFY(m_app->closeOut().value("closed").toBool());
+        m_app->setSetting("closeout_last", "");
+        m_app->setSetting("closeout_time", "");
+        QVERIFY(!m_app->today().value("closeOutDue").toBool()); // off
+
+        m_app->setSetting("review_weekday", QDate::currentDate().dayOfWeek() % 7);
+        QVERIFY(m_app->today().value("reviewDue").toBool());
+        m_app->finishReview(true);
+        QVERIFY(!m_app->today().value("reviewDue").toBool());
+        QVERIFY(m_app->weekReview().value("doneToday").toBool());
+        m_app->setSetting("review_last", "");
+        m_app->setSetting("review_weekday", (QDate::currentDate().dayOfWeek() + 1) % 7); // tomorrow: last done 6 days ago
+        QVERIFY(m_app->today().value("reviewDue").toBool());
+        m_app->setSetting("review_weekday", -1);
+        QVERIFY(!m_app->today().value("reviewDue").toBool());
+    }
+
+    void weekReviewLists()
+    {
+        const QString done = m_app->createTask({{"title", "Shipped it"}});
+        QVERIFY(m_app->setTaskStatus(done, "completed"));
+        const QString due = m_app->createTask({{"title", "Renew passport"}, {"due_date", QDate::currentDate().addDays(2).toString(Qt::ISODate)}});
+        const QVariantMap w = m_app->weekReview();
+        QCOMPARE(w.value("days").toList().size(), 7);
+        QCOMPARE(w.value("wins").toList().size(), 1);
+        QCOMPARE(w.value("wins").toList()[0].toMap().value("taskId").toString(), done);
+        QCOMPARE(w.value("dueSoon").toList().size(), 1);
+        QCOMPARE(w.value("dueSoon").toList()[0].toMap().value("taskId").toString(), due);
+
+        QVERIFY(m_app->letGo(due));
+        QCOMPARE(m_app->queries().task(due)->status, TaskStatus::Cancelled);
+        QVERIFY(m_app->weekReview().value("dueSoon").toList().isEmpty());
+
+        QSignalSpy failed(m_app.get(), &AppController::aiFailed);
+        m_app->summarizeWeek(); // no AI set up
+        QCOMPARE(failed.size(), 1);
+        QCOMPARE(failed[0][0].toString(), QStringLiteral("week"));
+    }
+
     void statsAndDBusStats()
     {
         QVERIFY(m_app->stats(7).value("tasks").toList().isEmpty());

@@ -23,3 +23,8 @@ Action=Popup
 Name=Block missed
 Comment=A scheduled block ended without being done
 Action=Popup
+
+[Event/closeOut]
+Name=Close out the day
+Comment=The evening nudge to wrap up the day
+Action=Popup

@@ -182,6 +182,34 @@ public:
     // planWithPace (the setting), paceActive (it has enough to go on)}
     Q_INVOKABLE QVariantMap stats(int days) const;
 
+    // Closing out the day (appcontroller_review.cpp). {date, dateLabel,
+    // workedMinutes, wins: [{taskId, title, at, routine, workedMinutes}],
+    // progress: [{taskId, title, minutes}], leftovers: [{kind: block|routine,
+    // id, taskId, title, start, end, timeless, earlier, dayLabel, bumps}],
+    // tomorrow: {date, label, blocks, routines, events, firstTitle, firstAt},
+    // noteId, note (today's day note), closed}
+    Q_INVOKABLE QVariantMap closeOut() const;
+    // One tap per leftover. Blocks: tomorrow | pile (unschedule) | drop
+    // (unschedule and cancel the task) | done. Routines: done | skip.
+    Q_INVOKABLE bool resolveLeftover(const QString &kind, const QString &id, const QString &choice);
+    // Cancels the task and removes its blocks still to do, as one step.
+    Q_INVOKABLE bool letGo(const QString &taskId);
+    // Every leftover block back to the pile and routines skipped, as one step.
+    Q_INVOKABLE bool clearLeftovers();
+    // Today's day note (tagged "day"), created on the first words; returns its id.
+    Q_INVOKABLE QString saveDayNote(const QString &text);
+    // `quietly`: from "Not today", without the good-night message.
+    Q_INVOKABLE void finishCloseOut(bool quietly = false);
+    // The last seven days: {from, to, rangeLabel, workedMinutes, sessions,
+    // finishedTasks, finishedRoutines, days: [{label, workedMinutes, finished}],
+    // wins, progress, moving: [{taskId, title, bumps}], stale: [{taskId, title,
+    // days}], dueSoon: [{taskId, title, due, overdue}], dayNotes: [{id, title,
+    // content}], estimateTasks, estimateRatio, doneToday}
+    Q_INVOKABLE QVariantMap weekReview() const;
+    // Answers with weekSummaryReady({summary, suggestions, by}) or aiFailed("week", …).
+    Q_INVOKABLE void summarizeWeek();
+    Q_INVOKABLE void finishReview(bool quietly = false);
+
     Q_INVOKABLE void setApiKey(const QString &key);
     Q_INVOKABLE void testAi();
     Q_INVOKABLE void refreshOllamaModels();
@@ -263,10 +291,17 @@ Q_SIGNALS:
     void commandNeedsApproval(const QString &actionId, const QString &taskTitle, const QString &command);
     void workStarted(const QString &taskId);
     void openTaskRequested(const QString &taskId);
+    // Show a page by its name in Main.qml (from a notification, say).
+    void pageRequested(const QString &name);
+    void weekSummaryReady(const QVariantMap &summary);
 
 private:
     void refresh(const QSet<QString> &tables);
     void refreshToday();
+    // After the close-out time and not closed yet today (Settings > Close out).
+    bool closeOutDue() const;
+    // From the review day on, until the week is reviewed.
+    bool reviewDue() const;
     void ensureOccurrences();
     QString resolveCategory(const QString &name) const;
     QString createFromCapture(const CaptureResult &r, const QString &source);

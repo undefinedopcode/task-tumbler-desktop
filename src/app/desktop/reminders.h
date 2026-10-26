@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QDate>
 #include <QObject>
 #include <QSet>
 #include <QTimer>
@@ -24,6 +25,8 @@ public:
 
 private:
     void check();
+    // Once a day, when the close-out time comes and the day isn't closed yet.
+    void nudgeCloseOut(bool desktop, bool phone);
     void notify(const QString &event, const QString &title, const QString &text, const AgendaItem &item, bool missed = false);
     void pushToPhone(const QString &event, const QString &title, const QString &text, const AgendaItem &item, bool missed);
     bool userAway() const;
@@ -33,6 +36,7 @@ private:
     QTimer m_timer;
     QSet<QString> m_fired;
     qint64 m_startedAt;
+    QDate m_closeOutNudged;
 };
 
 } // namespace tumbler

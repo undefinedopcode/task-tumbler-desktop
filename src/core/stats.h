@@ -51,6 +51,14 @@ struct Moving {
     int bumps = 0;
 };
 
+// Something finished in the range: a one-off task or a routine's occurrence.
+struct Finished {
+    QString taskId;
+    QString title;
+    qint64 at = 0;
+    bool routine = false;
+};
+
 struct Summary {
     QDate from;
     QDate to; // inclusive
@@ -67,6 +75,7 @@ struct Summary {
     QList<Calibration> bySize;     // estimate buckets, shortest first; empty buckets left out
     QList<Calibration> byCategory; // most tasks first
     QList<Moving> moving;          // bumped twice or more in the range, most first, at most five
+    QList<Finished> finished;      // in the order they were finished
 };
 
 // The first day with any work, completion or check-in, if there is one.

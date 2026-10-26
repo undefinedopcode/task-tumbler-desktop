@@ -21,6 +21,7 @@ qt_add_library(tumbler-core STATIC
     sync.h sync.cpp
     notes.h notes.cpp
     stats.h stats.cpp
+    review.h review.cpp
 )
 
 qt_add_resources(tumbler-core "migrations"

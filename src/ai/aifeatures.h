@@ -53,4 +53,30 @@ QList<Step> toSteps(const QJsonObject &answer);
 Request captureRequest(const QString &text, QDate today, const QStringList &categoryNames);
 CaptureResult toCapture(const QJsonObject &answer, QDate today);
 
+// ---- Weekly review --------------------------------------------------------------
+// A short, kind reading of the week. Titles only, plus their own day notes
+// when notes may leave the machine.
+
+struct WeekContext {
+    QString range;        // "Thursday 26 February to Wednesday 4 March"
+    int workedMinutes = 0;
+    QStringList finished; // titles, routines marked as such
+    QStringList progress; // "Title (40 min)"
+    QStringList moving;   // "Title (moved 3 times)"
+    QStringList stale;    // "Title (untouched for 30 days)"
+    QStringList dueSoon;  // "Title (due Tuesday 10 March)"
+    QString estimates;    // "finished tasks took about 1.4 times their estimates"
+    QStringList dayNotes; // their own close-out notes
+    QString userHints;
+};
+
+Request weekRequest(const WeekContext &context);
+
+struct WeekSummary {
+    QString summary;
+    QStringList suggestions; // at most three
+};
+
+WeekSummary toWeekSummary(const QJsonObject &answer);
+
 } // namespace tumbler::ai

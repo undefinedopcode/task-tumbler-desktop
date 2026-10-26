@@ -1,6 +1,6 @@
 qt_add_executable(task-tumbler
     main.cpp
-    appcontroller.h appcontroller.cpp appcontroller_ai.cpp appcontroller_desktop.cpp appcontroller_external.cpp appcontroller_notes.cpp appcontroller_stats.cpp
+    appcontroller.h appcontroller.cpp appcontroller_ai.cpp appcontroller_desktop.cpp appcontroller_external.cpp appcontroller_notes.cpp appcontroller_stats.cpp appcontroller_review.cpp
     keystore.h keystore.cpp
     tasklistmodel.h tasklistmodel.cpp
     variants.h variants.cpp
@@ -38,6 +38,8 @@ qt_add_qml_module(task-tumbler
         qml/pages/NotesPage.qml
         qml/pages/NoteEditorPage.qml
         qml/pages/StatsPage.qml
+        qml/pages/CloseOutPage.qml
+        qml/pages/WeekReviewPage.qml
         qml/components/Chip.qml
         qml/components/BarChart.qml
         qml/components/SectionTitle.qml

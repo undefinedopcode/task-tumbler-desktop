@@ -26,7 +26,9 @@ Kirigami.ApplicationWindow {
             onboarding: onboardingPage,
             energy: energyPage,
             notes: notesPage,
-            stats: statsPage
+            stats: statsPage,
+            closeout: closeOutPage,
+            review: weekReviewPage
         }
         if (name === "unfocus") {
             AppController.focusMode = false
@@ -92,10 +94,11 @@ Kirigami.ApplicationWindow {
 
     // A layer, not a column: it's a short side trip that covers the page
     // it came from, and pops back when done.
-    function openPlan() {
+    // `day` is an ISO date; today when left out.
+    function openPlan(day) {
         if (pageStack.layers.depth > 1)
             return
-        pageStack.layers.push(planPage)
+        pageStack.layers.push(planPage, day ? { day: day } : {})
     }
 
     function openFocus() {
@@ -176,6 +179,20 @@ Kirigami.ApplicationWindow {
                 onTriggered: root.openPlan()
             },
             Kirigami.Action {
+                text: i18n("Close Out the Day")
+                icon.name: "weather-clear-night"
+                checked: root.currentPage === "closeout"
+                shortcut: "Ctrl+E"
+                onTriggered: root.showPage("closeout")
+            },
+            Kirigami.Action {
+                text: i18n("Weekly Review")
+                icon.name: "view-calendar-month"
+                checked: root.currentPage === "review"
+                shortcut: "Ctrl+Shift+E"
+                onTriggered: root.showPage("review")
+            },
+            Kirigami.Action {
                 text: i18n("Quick Capture")
                 icon.name: "list-add"
                 onTriggered: root.openCapture()
@@ -218,6 +235,7 @@ Kirigami.ApplicationWindow {
             root.requestActivate()
         }
         function onOpenTaskRequested(taskId) { root.openTask(taskId) }
+        function onPageRequested(name) { root.showPage(name) }
         function onFocusModeChanged() {
             if (AppController.focusMode) {
                 root.show()
@@ -348,6 +366,17 @@ Kirigami.ApplicationWindow {
     Component {
         id: statsPage
         StatsPage { onOpenTask: taskId => root.openTask(taskId) }
+    }
+    Component {
+        id: closeOutPage
+        CloseOutPage { onOpenTask: taskId => root.openTask(taskId) }
+    }
+    Component {
+        id: weekReviewPage
+        WeekReviewPage {
+            onOpenTask: taskId => root.openTask(taskId)
+            onOpenNote: noteId => root.openNote(noteId)
+        }
     }
     Component {
         id: noteEditorPage

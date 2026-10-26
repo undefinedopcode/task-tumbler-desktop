@@ -64,6 +64,44 @@ Kirigami.ScrollablePage {
             ]
         }
 
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            visible: page.today.closeOutDue === true
+            type: Kirigami.MessageType.Positive
+            icon.name: "weather-clear-night"
+            text: i18n("Winding down? Take a couple of minutes to close out the day.")
+            actions: [
+                Kirigami.Action {
+                    text: i18n("Close out")
+                    icon.name: "go-next"
+                    onTriggered: applicationWindow().showPage("closeout")
+                },
+                Kirigami.Action {
+                    text: i18n("Not today")
+                    onTriggered: AppController.finishCloseOut(true)
+                }
+            ]
+        }
+
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            visible: page.today.reviewDue === true && page.today.closeOutDue !== true
+            type: Kirigami.MessageType.Information
+            icon.name: "view-calendar-month"
+            text: i18n("Time for the weekly review: a few minutes to look back and tidy up.")
+            actions: [
+                Kirigami.Action {
+                    text: i18n("Review the week")
+                    icon.name: "go-next"
+                    onTriggered: applicationWindow().showPage("review")
+                },
+                Kirigami.Action {
+                    text: i18n("Skip this week")
+                    onTriggered: AppController.finishReview(true)
+                }
+            ]
+        }
+
         WorkingCard {
             onOpenTask: taskId => page.openTask(taskId)
         }

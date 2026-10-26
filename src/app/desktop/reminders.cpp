@@ -48,12 +48,17 @@ void Reminders::check()
     };
 
     const QList<Reminder> due = dueReminders(view, now, lead, m_startedAt, m_fired);
-    if (due.isEmpty())
+    const bool closeOut = m_app->today().value(QStringLiteral("closeOutDue")).toBool() && m_closeOutNudged != view.date;
+    if (due.isEmpty() && !closeOut)
         return;
     const QString route = RemoteHub::route(settings.value(QStringLiteral("remoteNotify"), QStringLiteral("away")).toString(),
                                            m_hub && m_hub->hasPhones(), userAway());
     const bool desktop = route != QLatin1String("phone");
     const bool phone = route != QLatin1String("desktop");
+    if (closeOut) {
+        m_closeOutNudged = view.date;
+        nudgeCloseOut(desktop, phone);
+    }
 
     for (const Reminder &r : due) {
         const AgendaItem &item = r.item;
@@ -82,6 +87,40 @@ void Reminders::check()
         if (phone)
             pushToPhone(event, item.title, text, item, missed);
     }
+}
+
+void Reminders::nudgeCloseOut(bool desktop, bool phone)
+{
+    const QString title = i18n("Winding down?");
+    const QString text = i18n("Take a couple of minutes to close out the day: what got done, and where the rest goes.");
+    if (phone) {
+        m_hub->push({{QStringLiteral("title"), title},
+                     {QStringLiteral("body"), text},
+                     {QStringLiteral("tag"), QStringLiteral("tt-closeout")},
+                     {QStringLiteral("event"), QStringLiteral("closeOut")}},
+                    QStringLiteral("normal"));
+    }
+    if (!desktop)
+        return;
+    auto *n = new KNotification(QStringLiteral("closeOut"), KNotification::CloseOnTimeout);
+    n->setComponentName(QStringLiteral("tasktumbler"));
+    n->setTitle(title);
+    n->setText(text);
+    n->setIconName(QStringLiteral("org.kde.tasktumbler"));
+    QPointer<AppController> app = m_app;
+    const auto open = [app] {
+        if (!app)
+            return;
+        Q_EMIT app->showWindowRequested();
+        Q_EMIT app->pageRequested(QStringLiteral("closeout"));
+    };
+    connect(n->addDefaultAction(i18n("Close out")), &KNotificationAction::activated, this, open);
+    connect(n->addAction(i18n("Close out")), &KNotificationAction::activated, this, open);
+    connect(n->addAction(i18n("Not today")), &KNotificationAction::activated, this, [app] {
+        if (app)
+            app->finishCloseOut(true);
+    });
+    n->sendEvent();
 }
 
 bool Reminders::userAway() const

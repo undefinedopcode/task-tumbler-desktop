@@ -318,4 +318,57 @@ CaptureResult toCapture(const QJsonObject &a, QDate today)
     return r;
 }
 
+// ---- weekly review ----------------------------------------------------------------
+
+Request weekRequest(const WeekContext &c)
+{
+    const auto list = [](const QStringList &items) {
+        return items.isEmpty() ? QStringLiteral("(none)") : QStringLiteral("- ") + items.join(QStringLiteral("\n- "));
+    };
+    QStringList lines;
+    lines << QStringLiteral("Look back over their week, %1.").arg(c.range);
+    lines << QStringLiteral("Time logged: %1 h %2 min.").arg(c.workedMinutes / 60).arg(c.workedMinutes % 60);
+    lines << QStringLiteral("Finished:\n%1").arg(list(c.finished));
+    lines << QStringLiteral("Worked on, not finished yet:\n%1").arg(list(c.progress));
+    lines << QStringLiteral("Keeps getting moved to later:\n%1").arg(list(c.moving));
+    lines << QStringLiteral("Open and untouched for a while:\n%1").arg(list(c.stale));
+    lines << QStringLiteral("Due soon or past due, not scheduled:\n%1").arg(list(c.dueSoon));
+    if (!c.estimates.isEmpty())
+        lines << QStringLiteral("Estimates: %1.").arg(c.estimates);
+    if (!c.dayNotes.isEmpty())
+        lines << QStringLiteral("Their own notes from closing out each day:\n%1").arg(list(c.dayNotes));
+    if (!c.userHints.trimmed().isEmpty())
+        lines << QStringLiteral("Their own notes about how they work:\n%1").arg(c.userHints.trimmed());
+    lines << QStringLiteral(
+        "summary: two to four sentences, starting with what went well, in plain words. Notice patterns (what keeps "
+        "slipping, when things get done) without judging. No scores, no pep talk.\n"
+        "suggestions: up to three small, concrete things to try next week, each one sentence, naming the task where "
+        "it helps (for example breaking a task that keeps moving into steps, or letting go of one that's gone stale). "
+        "Fewer is fine.");
+
+    Request r;
+    r.feature = QStringLiteral("week");
+    r.system = kWho;
+    r.prompt = lines.join(QStringLiteral("\n\n"));
+    r.schema = object({
+        {QStringLiteral("summary"), str()},
+        {QStringLiteral("suggestions"), arrayOf(str())},
+    });
+    return r;
+}
+
+WeekSummary toWeekSummary(const QJsonObject &answer)
+{
+    WeekSummary w;
+    w.summary = answer.value(QLatin1String("summary")).toString().trimmed().left(2000);
+    for (const QJsonValue &v : answer.value(QLatin1String("suggestions")).toArray()) {
+        const QString s = v.toString().trimmed().left(300);
+        if (!s.isEmpty())
+            w.suggestions.append(s);
+        if (w.suggestions.size() == 3)
+            break;
+    }
+    return w;
+}
+
 } // namespace tumbler::ai

@@ -230,6 +230,8 @@ void AppController::refresh(const QSet<QString> &tables)
             {QStringLiteral("peakEnergyEnd"), q.setting(QStringLiteral("peak_energy_end"), QStringLiteral("12:00")).toString()},
             {QStringLiteral("breakMinutes"), q.setting(QStringLiteral("break_duration_minutes"), 15).toInt()},
             {QStringLiteral("planWithPace"), q.setting(QStringLiteral("plan_with_pace"), true).toBool()},
+            {QStringLiteral("closeOutTime"), q.setting(QStringLiteral("closeout_time"), QStringLiteral("17:30")).toString()},
+            {QStringLiteral("reviewWeekday"), q.setting(QStringLiteral("review_weekday"), 0).toInt()},
             {QStringLiteral("aiHints"), q.setting(QStringLiteral("ai_scheduling_hints"), QString()).toString()},
             {QStringLiteral("idleMinutes"), q.setting(QStringLiteral("idle_minutes"), 10).toInt()},
             {QStringLiteral("externalWrites"), q.setting(QStringLiteral("external_writes"), true).toBool()},
@@ -273,6 +275,8 @@ void AppController::refreshToday()
         {QStringLiteral("done"), toVariantList(v.done)},
         {QStringLiteral("ready"), ready},
         {QStringLiteral("readyTotal"), v.readyTotal},
+        {QStringLiteral("closeOutDue"), closeOutDue()},
+        {QStringLiteral("reviewDue"), reviewDue()},
     };
     Q_EMIT todayChanged();
 
