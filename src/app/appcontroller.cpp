@@ -122,6 +122,12 @@ qint64 AppController::now() const
     return QDateTime::currentMSecsSinceEpoch();
 }
 
+qint64 AppController::creationTime()
+{
+    m_lastCreated = std::max(now(), m_lastCreated + 1);
+    return m_lastCreated;
+}
+
 bool AppController::needsOnboarding() const
 {
     return queries().isEmpty() && !queries().setting(QStringLiteral("onboarded"), false).toBool();
@@ -387,7 +393,7 @@ QString AppController::createFromCapture(const CaptureResult &r, const QString &
         t.dueDate = *r.date;
     }
 
-    QList<Mutation> parts{ops::createTask(t, now())};
+    QList<Mutation> parts{ops::createTask(t, creationTime())};
     QString scheduled;
     // A one-off with a time of day becomes a block at that time.
     if (!r.recurrence && r.time) {
@@ -428,7 +434,7 @@ QString AppController::createTask(const QVariantMap &fields)
     rest.remove(QStringLiteral("title"));
     rest.remove(QStringLiteral("parent_task_id"));
 
-    QList<Mutation> parts{ops::createTask(t, now())};
+    QList<Mutation> parts{ops::createTask(t, creationTime())};
     if (!rest.isEmpty()) {
         // Build the edit against a database that already holds the new task:
         // run the creation first, then fold the edit into the same undo step.
@@ -513,14 +519,19 @@ QVariantMap AppController::taskDetail(const QString &id) const
 
     QVariantMap m = toVariant(*task);
 
-    QVariantList subtasks;
+    QList<Task> steps;
     for (const Task &t : std::as_const(all)) {
         if (t.parentId == id)
-            subtasks.append(toVariant(t));
+            steps.append(t);
     }
-    std::sort(subtasks.begin(), subtasks.end(), [](const QVariant &a, const QVariant &b) {
-        return a.toMap().value(QStringLiteral("createdAt")).toLongLong() < b.toMap().value(QStringLiteral("createdAt")).toLongLong();
+    // In the order they were added; the id settles ties so the order never
+    // depends on the hash.
+    std::sort(steps.begin(), steps.end(), [](const Task &a, const Task &b) {
+        return a.createdAt != b.createdAt ? a.createdAt < b.createdAt : a.id < b.id;
     });
+    QVariantList subtasks;
+    for (const Task &t : std::as_const(steps))
+        subtasks.append(toVariant(t));
     m.insert(QStringLiteral("subtasks"), subtasks);
 
     QVariantList prerequisites, dependents;

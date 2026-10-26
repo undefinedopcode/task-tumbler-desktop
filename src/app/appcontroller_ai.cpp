@@ -372,7 +372,6 @@ bool AppController::addSteps(const QString &taskId, const QVariantList &steps)
     if (!parent || steps.isEmpty())
         return false;
     QList<Mutation> parts;
-    qint64 created = now();
     for (const QVariant &v : steps) {
         const QVariantMap s = v.toMap();
         Task t;
@@ -385,8 +384,7 @@ bool AppController::addSteps(const QString &taskId, const QVariantList &steps)
         t.estimateMinutes = std::max(5, s.value(QStringLiteral("minutes")).toInt());
         t.energy = energyFromString(s.value(QStringLiteral("energy")).toString()).value_or(Energy::Medium);
         t.priority = parent->priority;
-        // One millisecond apart so the steps keep their order.
-        parts.append(ops::createTask(t, created++));
+        parts.append(ops::createTask(t, creationTime())); // a millisecond apart: they keep their order
     }
     if (parts.isEmpty())
         return false;

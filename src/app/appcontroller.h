@@ -258,6 +258,9 @@ public:
     void dailyBackup();
 
     qint64 now() const;
+    // now(), but always later than the last task created here, so tasks made
+    // in quick succession (subtasks over MCP, say) keep their order.
+    qint64 creationTime();
 
     // Changes from a sync: applied and shown, but not on the undo stack
     // (undoing them would just be redone by the next sync).
@@ -340,6 +343,7 @@ private:
     QTimer m_tick;
     QDate m_occurrencesThrough;
     QDate m_lastTodayDate;
+    qint64 m_lastCreated = 0;
 
     QNetworkAccessManager m_network;
     KeyStore *m_keys;
