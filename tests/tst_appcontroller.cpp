@@ -635,6 +635,41 @@ private slots:
         m_app->setSetting("external_writes", true);
     }
 
+    void schedulingAllowsForPace()
+    {
+        // Five finished half-hour tasks that each took an hour.
+        for (int i = 0; i < 5; ++i) {
+            const QString id = m_app->createTask({{"title", QStringLiteral("Done %1").arg(i)}, {"time_estimate_minutes", 30}});
+            const qint64 start = m_app->now() - 24 * 3600000LL;
+            QVERIFY(QSqlQuery(m_db->handle()).exec(QStringLiteral(
+                "INSERT INTO work_logs (id, task_id, started_at, ended_at, duration_minutes, created_at) VALUES ('w%1', '%2', %3, %4, 60, %3)")
+                .arg(i).arg(id).arg(start).arg(start + 60 * 60000)));
+            QVERIFY(m_app->setTaskStatus(id, "completed"));
+        }
+        const auto length = [this](const QString &taskId) {
+            const QList<ScheduleBlock> blocks = m_app->queries().schedulesForTask(taskId);
+            return blocks.isEmpty() ? 0 : int((blocks.first().end - blocks.first().start) / 60000);
+        };
+
+        const QString next = m_app->createTask({{"title", "Next"}, {"time_estimate_minutes", 30}});
+        QVERIFY(m_app->scheduleNextSlot(next));
+        QCOMPARE(length(next), 60);
+        const QString at = m_app->createTask({{"title", "At"}, {"time_estimate_minutes", 30}});
+        QVERIFY(m_app->scheduleAt(at, m_app->now() + 3 * 3600000LL, 0));
+        QCOMPARE(length(at), 60);
+        QVERIFY(m_app->scheduleAt(m_app->createTask({{"title", "Exact"}}), m_app->now() + 5 * 3600000LL, 20)); // a chosen length stands
+
+        // A stated estimate in capture is taken at its word; an unstated one isn't.
+        QCOMPARE(length(m_app->capture("stated tomorrow at 3pm ~30m")), 30);
+        QCOMPARE(length(m_app->capture("unstated tomorrow at 5pm")), 60);
+
+        m_app->setSetting("plan_with_pace", false);
+        const QString off = m_app->createTask({{"title", "Off"}, {"time_estimate_minutes", 30}});
+        QVERIFY(m_app->scheduleNextSlot(off));
+        QCOMPARE(length(off), 30);
+        QVERIFY(!m_app->stats(7).value("paceActive").toBool());
+    }
+
     void statsAndDBusStats()
     {
         QVERIFY(m_app->stats(7).value("tasks").toList().isEmpty());

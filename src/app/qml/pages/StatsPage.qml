@@ -261,7 +261,10 @@ FormCard.FormCardPage {
             description: page.estimates.tasks < 3
                          ? i18n("Time a few tasks through to done and this shows how long things really take compared with your estimates.")
                          : i18np("Typical result over %1 finished task with time logged.", "Typical result over %1 finished tasks with time logged.", page.estimates.tasks)
-                           + (page.estimates.ratio > 1.3 ? " " + i18n("Worth padding estimates by that much when you plan.") : "")
+                           + (page.estimates.ratio <= 1.15 ? ""
+                              : page.stats.paceActive ? " " + i18n("New blocks already allow for this.")
+                              : !page.stats.planWithPace ? " " + i18n("Turn on “Plan with your real pace” in Settings and new blocks will allow for this.")
+                              : "")
         }
         Repeater {
             model: page.estimates.tasks >= 3 ? (page.estimates.bySize || []).filter(c => c.tasks >= 2) : []

@@ -148,9 +148,11 @@ Kirigami.ScrollablePage {
             Layout.fillWidth: true
             wrapMode: Text.Wrap
             color: Kirigami.Theme.disabledTextColor
-            text: AppController.energy.level !== undefined && page.isToday
-                  ? i18n("Fitted around your category hours, what's already scheduled, and your energy (%1).", AppController.energy.label)
-                  : i18n("Fitted around your category hours and what's already scheduled. Untick anything you don't want.")
+            readonly property bool paced: page.plan !== null && page.plan.blocks.some(b => b.estimate > 0 && b.end - b.start > b.estimate * 60000)
+            text: (AppController.energy.level !== undefined && page.isToday
+                   ? i18n("Fitted around your category hours, what's already scheduled, and your energy (%1).", AppController.energy.label)
+                   : i18n("Fitted around your category hours and what's already scheduled. Untick anything you don't want."))
+                  + (paced ? " " + i18n("Blocks marked “est.” are longer than their estimate, to allow for how long things like them usually take you.") : "")
         }
 
         Repeater {
@@ -170,14 +172,19 @@ Kirigami.ScrollablePage {
                     spacing: Kirigami.Units.largeSpacing
                     ColumnLayout {
                         spacing: 0
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 7.5
+                        Layout.minimumWidth: Kirigami.Units.gridUnit * 7.5
                         Controls.Label {
                             text: Format.time(row.block.start)
                             font.features: { "tnum": 1 }
                             font.weight: Font.DemiBold
                         }
                         Controls.Label {
-                            text: Format.minutes(Math.round((row.block.end - row.block.start) / 60000))
+                            readonly property int minutes: Math.round((row.block.end - row.block.start) / 60000)
+                            // Longer than the estimate: allowing for your usual pace.
+                            text: minutes > row.block.estimate && row.block.estimate > 0
+                                  ? i18nc("planned length, then the task's own estimate", "%1 (est. %2)", Format.minutes(minutes), Format.minutes(row.block.estimate))
+                                  : Format.minutes(minutes)
                             color: Kirigami.Theme.disabledTextColor
                             font: Kirigami.Theme.smallFont
                         }

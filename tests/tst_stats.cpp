@@ -187,6 +187,53 @@ private slots:
         QVERIFY(!s.tasks.last().finished);
     }
 
+    void paceIsLearnedAndOnlyLengthens()
+    {
+        exec(QStringLiteral("INSERT INTO categories (id, name, schedule, created_at, updated_at) VALUES ('admin', 'Admin', '{}', 0, 0)"), {});
+        const auto finish = [this](const QString &id, int estimate, int worked, const QString &category = {}) {
+            task(id, estimate, "completed", category);
+            work(id, at(kDay, 9), worked);
+            history(id, "completed", at(kDay, 10));
+        };
+        const qint64 from = at(kDay.addDays(-1), 0);
+        const qint64 to = at(kDay.addDays(1), 0);
+
+        // Too little to go on: estimates stand.
+        for (int i = 0; i < 4; ++i)
+            finish(QStringLiteral("a%1").arg(i), 30, 60);
+        QVERIFY(stats::learnPace(q(), from, to).isEmpty());
+        QCOMPARE(stats::learnPace(q(), from, to).plannedMinutes(30, {}), 30);
+
+        // Five: half-hour tasks take double; that's the size's own factor.
+        finish("a4", 30, 60);
+        stats::Pace pace = stats::learnPace(q(), from, to);
+        QVERIFY(!pace.isEmpty());
+        QCOMPARE(pace.factorFor(30, {})->basis, QStringLiteral("size"));
+        QCOMPARE(pace.plannedMinutes(30, {}), 60);
+        QCOMPARE(pace.plannedMinutes(25, {}), 50);
+        QCOMPARE(pace.plannedMinutes(20, {}), 40);
+        // A size with no history of its own uses the overall pace.
+        QCOMPARE(pace.factorFor(90, {})->basis, QStringLiteral("overall"));
+        QCOMPARE(pace.plannedMinutes(90, {}), 180);
+
+        // A category with enough history wins; quicker than estimated never shortens.
+        for (int i = 0; i < 3; ++i)
+            finish(QStringLiteral("q%1").arg(i), 30, 15, "admin");
+        pace = stats::learnPace(q(), from, to);
+        QCOMPARE(pace.factorFor(30, "admin")->basis, QStringLiteral("category"));
+        QCOMPARE(pace.plannedMinutes(30, "admin"), 30);
+
+        // Capped at double, and rounded up to five minutes.
+        for (int i = 0; i < 3; ++i)
+            finish(QStringLiteral("s%1").arg(i), 10, 50);
+        pace = stats::learnPace(q(), from, to);
+        QCOMPARE(pace.plannedMinutes(10, {}), 20);
+        QCOMPARE(pace.plannedMinutes(7, {}), 15);
+
+        // Only tasks finished in the window count.
+        QVERIFY(stats::learnPace(q(), to, to + 86400000).isEmpty());
+    }
+
     void movingTasksAndEnergy()
     {
         task("stuck", 30);

@@ -215,6 +215,32 @@ private slots:
         QCOMPARE(layout(planDay(Queries(m_db->handle()), options(), kZone)), QStringList({"09:00-09:30 step"}));
     }
 
+    void paceStretchesBlocks()
+    {
+        // Five finished half-hour work tasks that each took 45 minutes.
+        for (int i = 0; i < 5; ++i) {
+            const QString id = QStringLiteral("done%1").arg(i);
+            add(id, 30);
+            QSqlQuery q(m_db->handle());
+            QVERIFY(q.exec(QStringLiteral("UPDATE tasks SET status = 'completed' WHERE id = '%1'").arg(id)));
+            QVERIFY(q.exec(QStringLiteral("INSERT INTO work_logs (id, task_id, started_at, ended_at, duration_minutes, created_at) "
+                                          "VALUES ('w%1', '%1', %2, %3, 45, 0)").arg(id).arg(at(7)).arg(at(7) + 45 * 60000)));
+            QVERIFY(q.exec(QStringLiteral("INSERT INTO task_history (id, task_id, action, at) VALUES ('h%1', '%1', 'completed', %2)")
+                               .arg(id).arg(at(8))));
+        }
+        add("a", 30);
+        add("b", 30);
+        const Queries q(m_db->handle());
+        PlanOptions o = options();
+        o.pace = stats::learnPace(q, at(0), at(9));
+        const DayPlan p = planDay(q, o, kZone);
+        QCOMPARE(layout(p), QStringList({"09:00-09:45 a", "09:45-10:30 b"}));
+        QCOMPARE(p.blocks.first().estimateMinutes, 30);
+
+        // Without it, the estimates as they are.
+        QCOMPARE(layout(planDay(q, options(), kZone)), QStringList({"09:00-09:30 a", "09:30-10:00 b"}));
+    }
+
     void maxBlocks()
     {
         for (int i = 0; i < 5; ++i)

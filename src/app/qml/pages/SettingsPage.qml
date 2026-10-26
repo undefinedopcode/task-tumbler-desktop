@@ -420,7 +420,7 @@ FormCard.FormCardPage {
         }
     }
 
-    FormCard.FormHeader { title: i18n("Energy") }
+    FormCard.FormHeader { title: i18n("Energy and planning") }
     FormCard.FormCard {
         FormCard.FormTextFieldDelegate {
             label: i18n("Best hours start (HH:MM)")
@@ -436,7 +436,6 @@ FormCard.FormCardPage {
             onEditingFinished: if (acceptableInput && text !== page.s.peakEnergyEnd) AppController.setSetting("peak_energy_end", text)
         }
         FormCard.FormDelegateSeparator {}
-        FormCard.FormDelegateSeparator {}
         FormCard.FormSpinBoxDelegate {
             label: i18n("Break after each planned block (minutes)")
             from: 0
@@ -444,6 +443,13 @@ FormCard.FormCardPage {
             stepSize: 5
             value: page.s.breakMinutes
             onValueModified: AppController.setSetting("break_duration_minutes", value)
+        }
+        FormCard.FormDelegateSeparator {}
+        FormCard.FormSwitchDelegate {
+            text: i18n("Plan with your real pace")
+            description: i18n("Once you've finished a few timed tasks, new blocks allow for how long things like them usually take you, up to double the estimate. They're never made shorter.")
+            checked: page.s.planWithPace
+            onToggled: AppController.setSetting("plan_with_pace", checked)
         }
         FormCard.FormDelegateSeparator {}
         FormCard.FormTextAreaDelegate {

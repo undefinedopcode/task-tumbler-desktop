@@ -3,6 +3,7 @@
 #include "queries.h"
 
 #include <QDate>
+#include <QHash>
 #include <QString>
 #include <QTimeZone>
 #include <array>
@@ -72,5 +73,40 @@ struct Summary {
 std::optional<QDate> firstActivity(const Queries &q, const QTimeZone &zone);
 
 Summary summarize(const Queries &q, QDate from, QDate to, const QTimeZone &zone);
+
+// How long things take you compared with your estimates, for planning:
+// learned from finished tasks, by category, then by estimate size, then
+// overall, whichever is most specific with enough tasks behind it.
+// It only ever lengthens a plan. Shortening risks an overfull day, and
+// finishing early is a nice surprise; running over is the one that hurts.
+class Pace
+{
+public:
+    static constexpr int kMinTasks = 5;      // finished tasks with time logged before anything changes
+    static constexpr int kMinGroupTasks = 3; // for a category or size of its own
+    static constexpr double kMinRatio = 1.1; // closer than this counts as spot on
+    static constexpr double kMaxRatio = 2.0; // never more than double an estimate
+
+    struct Factor {
+        double ratio = 1.0;
+        int tasks = 0;
+        QString basis; // "category", "size" or "overall"
+    };
+
+    bool isEmpty() const { return !m_overall; }
+    std::optional<Factor> factorFor(int estimate, const QString &categoryId) const;
+    // The estimate stretched to your pace, rounded up to 5 minutes; the
+    // estimate itself when there's nothing to go on or it's close enough.
+    int plannedMinutes(int estimate, const QString &categoryId) const;
+
+private:
+    friend Pace learnPace(const Queries &, qint64, qint64);
+    std::optional<Factor> m_overall;
+    QHash<QString, Factor> m_bySize;     // sizeOf key
+    QHash<QString, Factor> m_byCategory; // category id
+};
+
+// From tasks finished in [since, until).
+Pace learnPace(const Queries &q, qint64 since, qint64 until);
 
 } // namespace tumbler::stats

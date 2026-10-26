@@ -3,7 +3,6 @@
 #include "captureparser.h"
 #include "database.h"
 #include "dayplanner.h"
-#include "dayplanner.h"
 #include "mutation.h"
 #include "queries.h"
 #include "tasklistmodel.h"
@@ -179,7 +178,8 @@ public:
     // or a week over two months, then weekly is true), hours: [{hour, minutes, energy}],
     // tasks: [{id, title, estimate, worked, sessions, finished}],
     // estimates: {tasks, ratio, estimated, worked, bySize: [{size, tasks,
-    // ratio}], byCategory: [{name, tasks, ratio}]}, moving: [{id, title, bumps}]}
+    // ratio}], byCategory: [{name, tasks, ratio}]}, moving: [{id, title, bumps}],
+    // planWithPace (the setting), paceActive (it has enough to go on)}
     Q_INVOKABLE QVariantMap stats(int days) const;
 
     Q_INVOKABLE void setApiKey(const QString &key);
@@ -283,6 +283,11 @@ private:
     QString logAi(const QString &feature, const ai::Result &result, const QString &prompt);
     void setAiFeedback(const QString &logId, const QString &feedback);
     PlanOptions planOptions(QDate day) const;
+    // How long things usually take, from the last 90 days' finished tasks;
+    // empty when Settings > "Plan with your real pace" is off.
+    stats::Pace pace() const;
+    // A new block's length for a task: its estimate at your pace.
+    int plannedMinutes(const Task &task) const;
     QVariantMap planToVariant(const DayPlan &plan, const QString &aiError, const ai::Result *result, const QString &logId) const;
     // The default category's id, creating "Default" (every day, 06:00-23:00)
     // if there is none yet. Not undoable: it's setup.

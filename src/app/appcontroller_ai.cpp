@@ -174,12 +174,27 @@ PlanOptions AppController::planOptions(QDate day) const
     const QTime peakEnd = QTime::fromString(q.setting(QStringLiteral("peak_energy_end"), QStringLiteral("12:00")).toString(), QStringLiteral("HH:mm"));
     if (peakStart.isValid() && peakEnd.isValid() && peakStart < peakEnd)
         o.peak = TimeWindow{peakStart, peakEnd};
-    o.breakMinutes = q.setting(QStringLiteral("break_duration_minutes"), 10).toInt();
+    o.breakMinutes = q.setting(QStringLiteral("break_duration_minutes"), 15).toInt();
     if (day == today) {
         if (const auto e = q.latestEnergy(QDateTime(today, QTime(0, 0), z).toMSecsSinceEpoch()))
             o.energyLevel = e->level;
     }
+    o.pace = pace();
     return o;
+}
+
+stats::Pace AppController::pace() const
+{
+    const Queries q = queries();
+    if (!q.setting(QStringLiteral("plan_with_pace"), true).toBool())
+        return {};
+    return stats::learnPace(q, now() - 90LL * 24 * 3600 * 1000, now() + 1);
+}
+
+int AppController::plannedMinutes(const Task &task) const
+{
+    const int estimate = std::max(5, task.estimateMinutes);
+    return pace().plannedMinutes(estimate, task.categoryId);
 }
 
 QVariantMap AppController::planToVariant(const DayPlan &plan, const QString &aiError, const ai::Result *result, const QString &logId) const
@@ -191,6 +206,7 @@ QVariantMap AppController::planToVariant(const DayPlan &plan, const QString &aiE
                                   {QStringLiteral("start"), b.start},
                                   {QStringLiteral("end"), b.end},
                                   {QStringLiteral("reason"), b.reason},
+                                  {QStringLiteral("estimate"), b.estimateMinutes},
                                   {QStringLiteral("checked"), true}});
     }
     QVariantList unplaced;

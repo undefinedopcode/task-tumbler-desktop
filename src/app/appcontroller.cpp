@@ -229,6 +229,7 @@ void AppController::refresh(const QSet<QString> &tables)
             {QStringLiteral("peakEnergyStart"), q.setting(QStringLiteral("peak_energy_start"), QStringLiteral("09:00")).toString()},
             {QStringLiteral("peakEnergyEnd"), q.setting(QStringLiteral("peak_energy_end"), QStringLiteral("12:00")).toString()},
             {QStringLiteral("breakMinutes"), q.setting(QStringLiteral("break_duration_minutes"), 15).toInt()},
+            {QStringLiteral("planWithPace"), q.setting(QStringLiteral("plan_with_pace"), true).toBool()},
             {QStringLiteral("aiHints"), q.setting(QStringLiteral("ai_scheduling_hints"), QString()).toString()},
             {QStringLiteral("idleMinutes"), q.setting(QStringLiteral("idle_minutes"), 10).toInt()},
             {QStringLiteral("externalWrites"), q.setting(QStringLiteral("external_writes"), true).toBool()},
@@ -388,7 +389,9 @@ QString AppController::createFromCapture(const CaptureResult &r, const QString &
     if (!r.recurrence && r.time) {
         const QDate day = r.date.value_or(today);
         const qint64 start = QDateTime(day, *r.time, zone()).toMSecsSinceEpoch();
-        parts.append(ops::scheduleTask(newId(), t.id, start, start + qint64(t.estimateMinutes) * kMinute, now()));
+        // A stated estimate ("~30m") is taken at its word.
+        const int minutes = r.estimateMinutes ? t.estimateMinutes : plannedMinutes(t);
+        parts.append(ops::scheduleTask(newId(), t.id, start, start + qint64(minutes) * kMinute, now()));
         scheduled = formatTime(start, zone());
     }
     if (!apply(combine(QStringLiteral("Capture “%1”").arg(t.title), parts)))
@@ -585,7 +588,9 @@ bool AppController::scheduleNextSlot(const QString &taskId)
     const auto task = q.task(taskId);
     if (!task)
         return false;
-    const auto slot = nextFreeSlot(q, *task, now(), zone());
+    Task sized = *task;
+    sized.estimateMinutes = plannedMinutes(*task);
+    const auto slot = nextFreeSlot(q, sized, now(), zone());
     if (!slot) {
         Q_EMIT message(QStringLiteral("No free slot in the next two weeks within its category's hours"));
         return false;
@@ -593,8 +598,13 @@ bool AppController::scheduleNextSlot(const QString &taskId)
     Mutation m = ops::scheduleTask(newId(), taskId, slot->start, slot->end, now());
     m.text = QStringLiteral("Schedule “%1”").arg(task->title);
     const bool ok = apply(m);
-    if (ok)
+    if (ok && sized.estimateMinutes > std::max(5, task->estimateMinutes)) {
+        Q_EMIT message(QStringLiteral("“%1” scheduled for %2, %3 min to allow for your usual pace")
+                           .arg(task->title, formatTime(slot->start, zone()))
+                           .arg(sized.estimateMinutes));
+    } else if (ok) {
         Q_EMIT message(QStringLiteral("“%1” scheduled for %2").arg(task->title, formatTime(slot->start, zone())));
+    }
     return ok;
 }
 
@@ -603,7 +613,7 @@ bool AppController::scheduleAt(const QString &taskId, qint64 start, int minutes)
     const auto task = queries().task(taskId);
     if (!task)
         return false;
-    const int duration = minutes > 0 ? minutes : task->estimateMinutes;
+    const int duration = minutes > 0 ? minutes : plannedMinutes(*task);
     Mutation m = ops::scheduleTask(newId(), taskId, start, start + qint64(duration) * kMinute, now());
     m.text = QStringLiteral("Schedule “%1”").arg(task->title);
     return apply(m);

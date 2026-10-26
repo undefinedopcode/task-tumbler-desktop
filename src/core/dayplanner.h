@@ -3,6 +3,7 @@
 #include "entities.h"
 #include "planner.h"
 #include "queries.h"
+#include "stats.h"
 
 #include <QHash>
 #include <QList>
@@ -30,6 +31,9 @@ struct PlanOptions {
     std::optional<int> energyLevel;
     int maxBlocks = 12;
     std::optional<PlanGuidance> guidance;
+    // Stretches estimates to how long things usually take you. Empty: plan
+    // with the estimates as they are.
+    stats::Pace pace;
 };
 
 struct PlannedBlock {
@@ -38,6 +42,7 @@ struct PlannedBlock {
     qint64 start = 0;
     qint64 end = 0;
     QString reason;
+    int estimateMinutes = 0; // the task's own estimate; the block may be longer (pace)
 };
 
 struct UnplacedTask {
@@ -63,6 +68,7 @@ QList<Task> planCandidates(const Queries &q, QDate day, const QTimeZone &zone);
 //    excluding parents with open steps (the steps are planned instead);
 //  - a task waiting on unfinished prerequisites is only planned if every
 //    prerequisite is itself planned earlier the same day;
+//  - each block is the task's estimate, stretched by `options.pace`;
 //  - each task goes in its own category's hours, around existing blocks,
 //    timed recurring items and events that don't allow it, with a break
 //    after each planned block;

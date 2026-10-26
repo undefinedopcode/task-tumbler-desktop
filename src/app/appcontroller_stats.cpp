@@ -101,6 +101,8 @@ QVariantMap AppController::stats(int days) const
              {QStringLiteral("byCategory"), byCategory},
          }},
         {QStringLiteral("moving"), moving},
+        {QStringLiteral("planWithPace"), q.setting(QStringLiteral("plan_with_pace"), true).toBool()},
+        {QStringLiteral("paceActive"), !pace().isEmpty()},
     };
 }
 

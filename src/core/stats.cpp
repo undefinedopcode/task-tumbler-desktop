@@ -5,6 +5,7 @@
 #include <QSqlQuery>
 #include <QVariant>
 #include <algorithm>
+#include <cmath>
 
 namespace tumbler::stats {
 
@@ -58,6 +59,30 @@ QString sizeOf(int estimate)
             return QString::number(bound);
     }
     return QStringLiteral("longer");
+}
+
+struct FinishedTask {
+    QString id;
+    int estimate;
+    QString categoryId;
+    qint64 doneAt;
+};
+
+// One-off tasks finished in [start, end), by when they were last completed
+// (tasks imported without history fall back to their last update).
+QList<FinishedTask> finishedTasks(const Queries &q, qint64 start, qint64 end)
+{
+    QList<FinishedTask> out;
+    QSqlQuery f = run(q.db(),
+                      QStringLiteral("SELECT t.id, t.time_estimate_minutes, t.category_id, COALESCE(MAX(h.at), t.updated_at) AS done_at "
+                                     "FROM tasks t LEFT JOIN task_history h ON h.task_id = t.id AND h.action = 'completed' "
+                                     " AND (h.details IS NULL OR json_extract(h.details, '$.occurrence_date') IS NULL) "
+                                     "WHERE t.status = 'completed' AND t.recurrence IS NULL "
+                                     "GROUP BY t.id HAVING done_at >= ? AND done_at < ?"),
+                      {start, end});
+    while (f.next())
+        out.append({f.value(0).toString(), f.value(1).toInt(), f.value(2).toString(), f.value(3).toLongLong()});
+    return out;
 }
 
 } // namespace
@@ -141,8 +166,7 @@ Summary summarize(const Queries &q, QDate from, QDate to, const QTimeZone &zone)
         return a.workedMinutes != b.workedMinutes ? a.workedMinutes > b.workedMinutes : a.title < b.title;
     });
 
-    // Finished one-off tasks: when they were last completed (tasks imported
-    // without history fall back to their last update).
+    // Finished one-off tasks, and how long they took against their estimates.
     const QHash<QString, int> logged = q.loggedMinutes();
     QHash<QString, QString> categoryNames;
     for (const Category &c : q.categories())
@@ -150,26 +174,18 @@ Summary summarize(const Queries &q, QDate from, QDate to, const QTimeZone &zone)
     QList<Sample> all;
     QHash<QString, QList<Sample>> bySize;
     QHash<QString, QList<Sample>> byCategory;
-    QSqlQuery f = run(q.db(),
-                      QStringLiteral("SELECT t.id, t.time_estimate_minutes, t.category_id, COALESCE(MAX(h.at), t.updated_at) AS done_at "
-                                     "FROM tasks t LEFT JOIN task_history h ON h.task_id = t.id AND h.action = 'completed' "
-                                     " AND (h.details IS NULL OR json_extract(h.details, '$.occurrence_date') IS NULL) "
-                                     "WHERE t.status = 'completed' AND t.recurrence IS NULL "
-                                     "GROUP BY t.id HAVING done_at >= ? AND done_at < ?"),
-                      {start, end});
-    while (f.next()) {
+    for (const FinishedTask &f : finishedTasks(q, start, end)) {
         ++s.finishedTasks;
-        auto day = days.find(dayOf(f.value(3).toLongLong()));
+        auto day = days.find(dayOf(f.doneAt));
         if (day != days.end())
             ++day->finished;
-        const int estimate = f.value(1).toInt();
-        const int worked = logged.value(f.value(0).toString());
-        if (estimate <= 0 || worked <= 0)
+        const int worked = logged.value(f.id);
+        if (f.estimate <= 0 || worked <= 0)
             continue;
-        const Sample sample{estimate, worked};
+        const Sample sample{f.estimate, worked};
         all.append(sample);
-        bySize[sizeOf(estimate)].append(sample);
-        const QString category = categoryNames.value(f.value(2).toString());
+        bySize[sizeOf(f.estimate)].append(sample);
+        const QString category = categoryNames.value(f.categoryId);
         if (!category.isEmpty())
             byCategory[category].append(sample);
     }
@@ -219,6 +235,62 @@ Summary summarize(const Queries &q, QDate from, QDate to, const QTimeZone &zone)
     for (QDate d = s.from; d <= s.to; d = d.addDays(1))
         s.days.append(days.value(d));
     return s;
+}
+
+// ---- pace ---------------------------------------------------------------------
+
+std::optional<Pace::Factor> Pace::factorFor(int estimate, const QString &categoryId) const
+{
+    // The most specific basis with enough behind it.
+    if (const auto c = m_byCategory.constFind(categoryId); !categoryId.isEmpty() && c != m_byCategory.cend())
+        return *c;
+    if (const auto z = m_bySize.constFind(sizeOf(estimate)); z != m_bySize.cend())
+        return *z;
+    return m_overall;
+}
+
+int Pace::plannedMinutes(int estimate, const QString &categoryId) const
+{
+    const auto f = factorFor(estimate, categoryId);
+    if (!f || f->ratio < kMinRatio)
+        return estimate;
+    const double stretched = estimate * std::min(f->ratio, kMaxRatio);
+    return int(std::ceil(stretched / 5.0)) * 5;
+}
+
+Pace learnPace(const Queries &q, qint64 since, qint64 until)
+{
+    const QHash<QString, int> logged = q.loggedMinutes();
+    QList<Sample> all;
+    QHash<QString, QList<Sample>> bySize;
+    QHash<QString, QList<Sample>> byCategory;
+    for (const FinishedTask &f : finishedTasks(q, since, until)) {
+        const int worked = logged.value(f.id);
+        if (f.estimate <= 0 || worked <= 0)
+            continue;
+        const Sample sample{f.estimate, worked};
+        all.append(sample);
+        bySize[sizeOf(f.estimate)].append(sample);
+        if (!f.categoryId.isEmpty())
+            byCategory[f.categoryId].append(sample);
+    }
+
+    Pace pace;
+    if (all.size() < Pace::kMinTasks)
+        return pace; // too little to go on: plan with the estimates as they are
+    const auto factor = [](const QList<Sample> &samples, const QString &basis) {
+        return Pace::Factor{calibrate({}, samples).ratio, int(samples.size()), basis};
+    };
+    pace.m_overall = factor(all, QStringLiteral("overall"));
+    for (auto it = bySize.cbegin(); it != bySize.cend(); ++it) {
+        if (it.value().size() >= Pace::kMinGroupTasks)
+            pace.m_bySize.insert(it.key(), factor(it.value(), QStringLiteral("size")));
+    }
+    for (auto it = byCategory.cbegin(); it != byCategory.cend(); ++it) {
+        if (it.value().size() >= Pace::kMinGroupTasks)
+            pace.m_byCategory.insert(it.key(), factor(it.value(), QStringLiteral("category")));
+    }
+    return pace;
 }
 
 } // namespace tumbler::stats

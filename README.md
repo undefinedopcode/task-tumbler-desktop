@@ -50,6 +50,7 @@ Phase 3:
 Phase 2:
 
 - **Plan my day** (Ctrl+P): fills free time with what matters, inside each category's hours and around blocks, events and routines. Demanding work goes in your best hours, easy work outside them, and prerequisites come first. Nothing is scheduled until you review the list, and accepting it is one undoable step. It works fully offline.
+- **Your real pace:** once five or more timed tasks are finished, new blocks allow for how long things like them usually take you. That covers Plan my day, Schedule next slot, dropping a task on the schedule, and captures with a time but no stated estimate. It's learned from the last 90 days, by category, then by estimate size, then overall. Blocks are never made shorter and never more than double the estimate. Plan my day marks them "(est. 30 min)", and you can turn it off in Settings.
 - **AI, optional:** Claude through an Anthropic API key (kept in KWallet), or a local model through Ollama.
   - The AI ranks and filters tasks and explains why. The offline planner still computes every time, so a small local model can't produce an impossible schedule.
   - Every answer is checked against a schema, with one retry. If the AI fails, you get the offline plan and the reason.

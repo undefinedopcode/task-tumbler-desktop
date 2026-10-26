@@ -222,7 +222,8 @@ DayPlan planDay(const Queries &q, const PlanOptions &options, const QTimeZone &z
                     busy.append({e.startAt, e.endAt});
             }
 
-            const qint64 duration = qint64(std::max(5, t.estimateMinutes)) * kMinute;
+            const int estimate = std::max(5, t.estimateMinutes);
+            const qint64 duration = qint64(options.pace.plannedMinutes(estimate, t.categoryId)) * kMinute;
             std::optional<qint64> start;
             QString where;
             if (peak) {
@@ -261,7 +262,7 @@ DayPlan planDay(const Queries &q, const PlanOptions &options, const QTimeZone &z
                     why.append(QStringLiteral("After “%1”").arg(tasks.value(p).title));
             }
 
-            plan.blocks.append({t.id, t.title, *start, *start + duration, why.join(QStringLiteral(" · "))});
+            plan.blocks.append({t.id, t.title, *start, *start + duration, why.join(QStringLiteral(" · ")), estimate});
             placedBusy.append({*start, *start + duration + breakMs});
             placedEnd.insert(t.id, *start + duration);
             progressed = true;
