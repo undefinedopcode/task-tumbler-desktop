@@ -47,6 +47,22 @@ public Q_SLOTS:
     // time worked, things finished, busy hours, estimate accuracy.
     Q_SCRIPTABLE QString Stats(int days);
 
+    // Closing out the day: what got done, what's still open, tomorrow at a glance.
+    Q_SCRIPTABLE QString CloseOut();
+    // kind: "block" or "routine", id: the leftover's id from CloseOut.
+    // choice for blocks: "tomorrow", "pile", "drop", "done"; for routines: "done", "skip".
+    Q_SCRIPTABLE bool ResolveLeftover(const QString &kind, const QString &id, const QString &choice);
+    Q_SCRIPTABLE bool ClearLeftovers();
+    // Adds a paragraph to today's day note, starting it if there isn't one. Returns its id.
+    Q_SCRIPTABLE QString AddToDayNote(const QString &text);
+    Q_SCRIPTABLE bool FinishCloseOut();
+    // Cancels a task and takes its blocks off the schedule.
+    Q_SCRIPTABLE bool LetGo(const QString &id);
+
+    // The last seven days: what was done, what keeps moving, gone quiet, due soon.
+    Q_SCRIPTABLE QString WeekReview();
+    Q_SCRIPTABLE bool FinishReview();
+
 private:
     bool mayWrite();
     AppController *m_app;

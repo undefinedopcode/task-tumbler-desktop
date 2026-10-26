@@ -122,6 +122,45 @@ QJsonArray Server::tools()
                                                    {QStringLiteral("description"), QStringLiteral("How many days back, including today; "
                                                                                                   "0 for everything. Default 7")}}}},
              {}, true),
+        tool(QStringLiteral("get_close_out"),
+             QStringLiteral("Closing out today: what got finished and worked on, the leftovers (blocks that didn't get done, from "
+                            "today or the last two weeks, and today's routines still open), today's day note, and tomorrow at a glance. "
+                            "'closed' says whether the user has closed the day already."),
+             {}, {}, true),
+        tool(QStringLiteral("resolve_leftover"),
+             QStringLiteral("Decide where one leftover from get_close_out goes. Blocks: 'tomorrow' (first free slot tomorrow), "
+                            "'pile' (unschedule it; the task stays on the list), 'drop' (cancel the task), 'done'. Routines: 'done' "
+                            "or 'skip'. Ask the user before dropping anything."),
+             {{QStringLiteral("kind"), QJsonObject{{QStringLiteral("type"), QStringLiteral("string")},
+                                                   {QStringLiteral("enum"), QJsonArray{QStringLiteral("block"), QStringLiteral("routine")}},
+                                                   {QStringLiteral("description"), QStringLiteral("The leftover's kind")}}},
+              {QStringLiteral("id"), prop("string", QStringLiteral("The leftover's id (not its task id), from get_close_out"))},
+              {QStringLiteral("choice"), QJsonObject{{QStringLiteral("type"), QStringLiteral("string")},
+                                                     {QStringLiteral("enum"), QJsonArray{QStringLiteral("tomorrow"), QStringLiteral("pile"),
+                                                                                         QStringLiteral("drop"), QStringLiteral("done"),
+                                                                                         QStringLiteral("skip")}},
+                                                     {QStringLiteral("description"), QStringLiteral("Where it goes")}}}},
+             {QStringLiteral("kind"), QStringLiteral("id"), QStringLiteral("choice")}),
+        tool(QStringLiteral("clear_leftovers"),
+             QStringLiteral("Unschedule all of today's leftovers and skip today's open routines, in one undoable step. The tasks "
+                            "stay on the list for another day.")),
+        tool(QStringLiteral("add_to_day_note"),
+             QStringLiteral("Add a paragraph to today's day note (a note tagged 'day' that the weekly review reads back), starting it "
+                            "if there isn't one. Never replaces what's there. Only write what the user asked to have noted."),
+             {{QStringLiteral("text"), prop("string", QStringLiteral("Markdown to add"))}}, {QStringLiteral("text")}),
+        tool(QStringLiteral("close_day"),
+             QStringLiteral("Mark today closed out, so the app stops nudging about it.")),
+        tool(QStringLiteral("let_go"),
+             QStringLiteral("Let go of a task: cancel it and take its blocks off the schedule. For things that aren't going to "
+                            "happen; ask the user first."),
+             id, {QStringLiteral("id")}),
+        tool(QStringLiteral("get_week_review"),
+             QStringLiteral("The last seven days for a weekly review: time worked per day, what got finished and worked on, open "
+                            "tasks that keep getting moved, tasks untouched for three weeks or more, tasks due within a week that "
+                            "aren't scheduled (including overdue ones), and the week's day notes."),
+             {}, {}, true),
+        tool(QStringLiteral("finish_week_review"),
+             QStringLiteral("Mark this week reviewed, so the app stops nudging about it.")),
     };
 }
 
@@ -160,7 +199,8 @@ std::optional<QJsonObject> Server::handle(const QJsonObject &message)
             {QStringLiteral("instructions"),
              QStringLiteral("Task Tumbler is the user's personal task manager (they have ADHD/ASD). Read before writing; prefer "
                             "small, concrete tasks; don't add or change things they didn't ask for. Every change can be undone in "
-                            "the app with Ctrl+Z. Notes are theirs too: search them for context, and only write one when asked.")},
+                            "the app with Ctrl+Z. Notes are theirs too: search them for context, and only write one when asked. "
+                            "Closing out the day or reviewing the week is about noticing what got done, not judging what didn't.")},
         });
     }
     if (method == QLatin1String("ping"))
@@ -203,14 +243,38 @@ QJsonObject Server::callTool(const QString &name, const QJsonObject &args)
                                                                  args.value(QLatin1String("task_id")).toString(), tags}, false}},
         {QStringLiteral("append_to_note"), {QStringLiteral("AppendToNote"), {id, args.value(QLatin1String("text")).toString()}, true}},
         {QStringLiteral("get_stats"), {QStringLiteral("Stats"), {std::max(0, args.value(QLatin1String("days")).toInt(7))}, false}},
+        {QStringLiteral("get_close_out"), {QStringLiteral("CloseOut"), {}, false}},
+        {QStringLiteral("resolve_leftover"), {QStringLiteral("ResolveLeftover"), {args.value(QLatin1String("kind")).toString(), id,
+                                                                                args.value(QLatin1String("choice")).toString()}, true}},
+        {QStringLiteral("clear_leftovers"), {QStringLiteral("ClearLeftovers"), {}, false}},
+        {QStringLiteral("add_to_day_note"), {QStringLiteral("AddToDayNote"), {args.value(QLatin1String("text")).toString()}, false}},
+        {QStringLiteral("close_day"), {QStringLiteral("FinishCloseOut"), {}, false}},
+        {QStringLiteral("let_go"), {QStringLiteral("LetGo"), {id}, true}},
+        {QStringLiteral("get_week_review"), {QStringLiteral("WeekReview"), {}, false}},
+        {QStringLiteral("finish_week_review"), {QStringLiteral("FinishReview"), {}, false}},
     };
     const auto it = calls.constFind(name);
     if (it == calls.constEnd())
         return toolText(QStringLiteral("Unknown tool: %1").arg(name), true);
     const bool aboutNotes = name.contains(QLatin1String("note"));
-    if (it->needsId && id.isEmpty())
-        return toolText(aboutNotes ? QStringLiteral("This tool needs a note id") : QStringLiteral("This tool needs a task id"), true);
-    if ((name == QLatin1String("add_task") || name == QLatin1String("append_to_note"))
+    if (it->needsId && id.isEmpty()) {
+        return toolText(aboutNotes ? QStringLiteral("This tool needs a note id")
+                        : name == QLatin1String("resolve_leftover") ? QStringLiteral("This tool needs a leftover id, from get_close_out")
+                                                                    : QStringLiteral("This tool needs a task id"),
+                        true);
+    }
+    if (name == QLatin1String("resolve_leftover")) {
+        const QString kind = args.value(QLatin1String("kind")).toString();
+        const QString choice = args.value(QLatin1String("choice")).toString();
+        const QStringList choices = kind == QLatin1String("routine") ? QStringList{QStringLiteral("done"), QStringLiteral("skip")}
+            : kind == QLatin1String("block") ? QStringList{QStringLiteral("tomorrow"), QStringLiteral("pile"), QStringLiteral("drop"), QStringLiteral("done")}
+                                             : QStringList{};
+        if (choices.isEmpty())
+            return toolText(QStringLiteral("kind must be 'block' or 'routine'"), true);
+        if (!choices.contains(choice))
+            return toolText(QStringLiteral("For a %1, choice must be one of: %2").arg(kind, choices.join(QStringLiteral(", "))), true);
+    }
+    if ((name == QLatin1String("add_task") || name == QLatin1String("append_to_note") || name == QLatin1String("add_to_day_note"))
         && args.value(QLatin1String("text")).toString().trimmed().isEmpty())
         return toolText(QStringLiteral("%1 needs some text").arg(name), true);
     if (name == QLatin1String("add_note") && args.value(QLatin1String("title")).toString().trimmed().isEmpty()
@@ -227,7 +291,7 @@ QJsonObject Server::callTool(const QString &name, const QJsonObject &args)
                               : toolText(QStringLiteral("That didn't work (check the id, or whether it's already done)."), true);
     }
     const QString text = value.toString();
-    if (name == QLatin1String("add_task") || name == QLatin1String("add_note")) {
+    if (name == QLatin1String("add_task") || name == QLatin1String("add_note") || name == QLatin1String("add_to_day_note")) {
         return text.isEmpty() ? toolText(QStringLiteral("Nothing was added."), true)
                               : toolText(QStringLiteral("{\"id\":\"%1\"}").arg(text));
     }

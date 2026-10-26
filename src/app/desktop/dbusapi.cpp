@@ -154,4 +154,60 @@ bool DBusApi::AppendToNote(const QString &id, const QString &text)
     return mayWrite() && m_app->appendToNote(id, text);
 }
 
+QString DBusApi::CloseOut()
+{
+    return json(m_app->closeOut());
+}
+
+bool DBusApi::ResolveLeftover(const QString &kind, const QString &id, const QString &choice)
+{
+    return mayWrite() && m_app->resolveLeftover(kind, id, choice);
+}
+
+bool DBusApi::ClearLeftovers()
+{
+    return mayWrite() && m_app->clearLeftovers();
+}
+
+QString DBusApi::AddToDayNote(const QString &text)
+{
+    if (!mayWrite() || text.trimmed().isEmpty())
+        return {};
+    // Added to, never replaced: the note is the user's own words. Undoable,
+    // unlike the close-out page's note box, which saves as you type.
+    const QVariantMap day = m_app->closeOut();
+    const QString id = day.value(QStringLiteral("noteId")).toString();
+    if (!id.isEmpty())
+        return m_app->appendToNote(id, text) ? id : QString();
+    return m_app->createNote({{QStringLiteral("title"), day.value(QStringLiteral("dateLabel"))},
+                              {QStringLiteral("content"), text},
+                              {QStringLiteral("tags"), QStringList{QStringLiteral("day")}}});
+}
+
+bool DBusApi::FinishCloseOut()
+{
+    if (!mayWrite())
+        return false;
+    m_app->finishCloseOut();
+    return true;
+}
+
+bool DBusApi::LetGo(const QString &id)
+{
+    return mayWrite() && m_app->letGo(id);
+}
+
+QString DBusApi::WeekReview()
+{
+    return json(m_app->weekReview());
+}
+
+bool DBusApi::FinishReview()
+{
+    if (!mayWrite())
+        return false;
+    m_app->finishReview();
+    return true;
+}
+
 } // namespace tumbler

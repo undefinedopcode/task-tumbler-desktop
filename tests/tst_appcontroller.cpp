@@ -818,6 +818,53 @@ private slots:
         QCOMPARE(QJsonDocument::fromJson(api.Tasks("done", "").toUtf8()).array().size(), 1);
     }
 
+    void dbusCloseOutAndReview()
+    {
+        DBusApi api(m_app.get());
+        const QString id = m_app->createTask({{"title", "Left over"}, {"time_estimate_minutes", 30}});
+        QVERIFY(m_app->scheduleAt(id, m_app->now() - 2 * 3600000LL, 30));
+        const QString other = m_app->createTask({{"title", "Not happening"}, {"time_estimate_minutes", 30}});
+        QVERIFY(m_app->scheduleAt(other, m_app->now() - 3600000LL, 30));
+
+        QJsonObject day = QJsonDocument::fromJson(api.CloseOut().toUtf8()).object();
+        const QJsonArray left = day.value("leftovers").toArray();
+        QCOMPARE(left.size(), 2);
+        QVERIFY(!day.value("closed").toBool());
+        const QJsonObject first = left[0].toObject();
+        QCOMPARE(first.value("taskId").toString(), id);
+        QVERIFY(!api.ResolveLeftover("block", first.value("id").toString(), "nonsense"));
+        QVERIFY(api.ResolveLeftover("block", first.value("id").toString(), "pile"));
+        QVERIFY(api.LetGo(other));
+        QCOMPARE(m_app->queries().task(other)->status, TaskStatus::Cancelled);
+        QVERIFY(QJsonDocument::fromJson(api.CloseOut().toUtf8()).object().value("leftovers").toArray().isEmpty());
+        QVERIFY(!api.ClearLeftovers()); // nothing left
+
+        // The day note is added to, never replaced, and each addition undoes on its own.
+        m_app->saveDayNote("Typed in the app");
+        const QString note = api.AddToDayNote("From an agent");
+        QVERIFY(!note.isEmpty());
+        QCOMPARE(QJsonDocument::fromJson(api.CloseOut().toUtf8()).object().value("note").toString(),
+                 QStringLiteral("Typed in the app\n\nFrom an agent"));
+        m_app->undo();
+        QCOMPARE(QJsonDocument::fromJson(api.CloseOut().toUtf8()).object().value("note").toString(), QStringLiteral("Typed in the app"));
+        QVERIFY(api.AddToDayNote("  ").isEmpty());
+
+        QVERIFY(api.FinishCloseOut());
+        QVERIFY(QJsonDocument::fromJson(api.CloseOut().toUtf8()).object().value("closed").toBool());
+        const QJsonObject week = QJsonDocument::fromJson(api.WeekReview().toUtf8()).object();
+        QVERIFY(week.contains("stale") && week.contains("dueSoon"));
+        QVERIFY(!week.value("doneToday").toBool());
+        QVERIFY(api.FinishReview());
+        QVERIFY(QJsonDocument::fromJson(api.WeekReview().toUtf8()).object().value("doneToday").toBool());
+
+        m_app->setSetting("external_writes", false);
+        QVERIFY(api.AddToDayNote("blocked").isEmpty());
+        QVERIFY(!api.FinishReview());
+        QVERIFY(!api.LetGo(id));
+        QVERIFY(!QJsonDocument::fromJson(api.CloseOut().toUtf8()).object().isEmpty()); // reads still work
+        m_app->setSetting("external_writes", true);
+    }
+
     void focusMode()
     {
         const QString id = m_app->createTask({{"title", "Draft"}});

@@ -98,7 +98,11 @@ private slots:
             QVERIFY(!t.toObject().value("description").toString().isEmpty());
         }
         QCOMPARE(names, QStringList({"get_today", "list_tasks", "get_task", "get_current", "add_task", "complete_task", "start_work",
-                                     "stop_work", "schedule_task", "search_notes", "get_note", "add_note", "append_to_note", "get_stats"}));
+                                     "stop_work", "schedule_task", "search_notes", "get_note", "add_note", "append_to_note", "get_stats",
+                                     "get_close_out", "resolve_leftover", "clear_leftovers", "add_to_day_note", "close_day", "let_go",
+                                     "get_week_review", "finish_week_review"}));
+        QVERIFY(tools.at(names.indexOf("get_close_out")).toObject().value("annotations").toObject().value("readOnlyHint").toBool());
+        QVERIFY(!tools.at(names.indexOf("resolve_leftover")).toObject().value("annotations").toObject().value("readOnlyHint").toBool());
         QVERIFY(tools.at(names.indexOf("search_notes")).toObject().value("annotations").toObject().value("readOnlyHint").toBool());
         QVERIFY(!tools.at(names.indexOf("add_note")).toObject().value("annotations").toObject().value("readOnlyHint").toBool());
         // Reads are marked read-only so clients can allow them without asking.
@@ -165,6 +169,36 @@ private slots:
         QCOMPARE(backend.calls.last().second, QVariantList({0}));
         server.handle(request("tools/call", {{"name", "get_stats"}, {"arguments", QJsonObject{{"days", -3}}}}));
         QCOMPARE(backend.calls.last().second, QVariantList({0}));
+    }
+
+    void closeOutToolsMapToTheDBusApi()
+    {
+        FakeBackend backend;
+        backend.answers = {{"CloseOut", "{\"leftovers\":[]}"}, {"ResolveLeftover", true}, {"AddToDayNote", "note-9"},
+                           {"LetGo", true}, {"WeekReview", "{}"}, {"FinishReview", true}, {"ClearLeftovers", false}};
+        Server server(&backend);
+        const auto call = [&](const QString &name, const QJsonObject &args = {}) {
+            return *server.handle(request("tools/call", {{"name", name}, {"arguments", args}}));
+        };
+
+        QCOMPARE(toolTextOf(call("get_close_out")), QStringLiteral("{\"leftovers\":[]}"));
+        QVERIFY(!isToolError(call("resolve_leftover", {{"kind", "block"}, {"id", "b1"}, {"choice", "pile"}})));
+        QCOMPARE(backend.calls.last(), qMakePair(QStringLiteral("ResolveLeftover"), QVariantList({"block", "b1", "pile"})));
+        QCOMPARE(toolTextOf(call("add_to_day_note", {{"text", "Good day"}})), QStringLiteral("{\"id\":\"note-9\"}"));
+        QVERIFY(!isToolError(call("let_go", {{"id", "t1"}})));
+        QCOMPARE(backend.calls.last(), qMakePair(QStringLiteral("LetGo"), QVariantList({"t1"})));
+        QVERIFY(isToolError(call("clear_leftovers"))); // nothing to clear
+        QCOMPARE(toolTextOf(call("get_week_review")), QStringLiteral("{}"));
+        QVERIFY(!isToolError(call("finish_week_review")));
+
+        // Refused before reaching the app.
+        const qsizetype before = backend.calls.size();
+        QVERIFY(toolTextOf(call("resolve_leftover", {{"kind", "block"}, {"choice", "pile"}})).contains("leftover id"));
+        QVERIFY(toolTextOf(call("resolve_leftover", {{"kind", "task"}, {"id", "b1"}, {"choice", "pile"}})).contains("'block' or 'routine'"));
+        QVERIFY(toolTextOf(call("resolve_leftover", {{"kind", "routine"}, {"id", "o1"}, {"choice", "pile"}})).contains("done, skip"));
+        QVERIFY(isToolError(call("add_to_day_note", {{"text", "  "}})));
+        QVERIFY(isToolError(call("let_go")));
+        QCOMPARE(backend.calls.size(), before);
     }
 
     void toolCallValidationAndFailures()

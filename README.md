@@ -46,7 +46,7 @@ Phase 3:
 - **CLI:** `task-tumbler --add "call mum tomorrow at 6pm"` captures into the running instance.
 - **KRunner** (enable it in Settings): `tt <anything>` captures. Typing part of a task's name lets you open, start or finish it.
 - **MCP server:** `task-tumbler --mcp` speaks the Model Context Protocol on stdio and drives the running app over D-Bus, so agents' changes are live and undoable.
-  - Tools: get_today, list_tasks, get_task, get_current, add_task, complete_task, start_work, stop_work, schedule_task, and for notes search_notes, get_note, add_note, append_to_note (D-Bus: `Notes`, `Note`, `AddNote`, `AppendToNote`), and get_stats (D-Bus: `Stats`).
+  - Tools: get_today, list_tasks, get_task, get_current, add_task, complete_task, start_work, stop_work, schedule_task, and for notes search_notes, get_note, add_note, append_to_note (D-Bus: `Notes`, `Note`, `AddNote`, `AppendToNote`), get_stats (D-Bus: `Stats`), and for winding down get_close_out, resolve_leftover, clear_leftovers, add_to_day_note, close_day, let_go, get_week_review and finish_week_review (D-Bus: `CloseOut`, `ResolveLeftover`, `ClearLeftovers`, `AddToDayNote`, `FinishCloseOut`, `LetGo`, `WeekReview`, `FinishReview`). An agent can only add to the day note, never replace it.
   - For Claude Code: `claude mcp add task-tumbler -- task-tumbler --mcp`.
   - Settings → "Let other apps change tasks" makes D-Bus, KRunner and MCP read-only.
 

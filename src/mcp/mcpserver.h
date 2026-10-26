@@ -19,8 +19,9 @@ public:
 };
 
 // A Model Context Protocol server: JSON-RPC 2.0 messages in, replies out.
-// Exposes tools to read the day and tasks and to capture, finish, start
-// and schedule tasks.
+// Exposes tools to read the day and tasks, to capture, finish, start and
+// schedule tasks, for notes and stats, and to close out the day and review
+// the week.
 class Server
 {
 public:
