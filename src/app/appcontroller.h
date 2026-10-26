@@ -172,6 +172,16 @@ public:
     // Open tasks a note can be about: [{id, title}] by title.
     Q_INVOKABLE QVariantList noteTaskChoices() const;
 
+    // Looking back over the last `days` days including today, or everything
+    // when 0 (appcontroller_stats.cpp). {from, to, workedMinutes, sessions,
+    // averageSessionMinutes, longestSessionMinutes, finishedTasks,
+    // finishedRoutines, bars: [{label, workedMinutes, finished}] (a bar a day,
+    // or a week over two months, then weekly is true), hours: [{hour, minutes, energy}],
+    // tasks: [{id, title, estimate, worked, sessions, finished}],
+    // estimates: {tasks, ratio, estimated, worked, bySize: [{size, tasks,
+    // ratio}], byCategory: [{name, tasks, ratio}]}, moving: [{id, title, bumps}]}
+    Q_INVOKABLE QVariantMap stats(int days) const;
+
     Q_INVOKABLE void setApiKey(const QString &key);
     Q_INVOKABLE void testAi();
     Q_INVOKABLE void refreshOllamaModels();

@@ -1,6 +1,7 @@
 #include "mcpserver.h"
 
 #include <QJsonDocument>
+#include <algorithm>
 #include <cstdio>
 #include <iostream>
 #include <string>
@@ -112,6 +113,15 @@ QJsonArray Server::tools()
              {{QStringLiteral("id"), prop("string", QStringLiteral("Note id, from search_notes or add_note"))},
               {QStringLiteral("text"), prop("string", QStringLiteral("Markdown to add"))}},
              {QStringLiteral("id"), QStringLiteral("text")}),
+        tool(QStringLiteral("get_stats"),
+             QStringLiteral("Looking back: time worked (per day or week, per task, per hour of day with average energy), tasks and "
+                            "routines finished, open tasks that keep getting moved, and how long finished tasks took against their "
+                            "estimates (median ratio overall, by size and by category; 1.0 is spot on). Minutes throughout."),
+             {{QStringLiteral("days"), QJsonObject{{QStringLiteral("type"), QStringLiteral("integer")},
+                                                   {QStringLiteral("minimum"), 0},
+                                                   {QStringLiteral("description"), QStringLiteral("How many days back, including today; "
+                                                                                                  "0 for everything. Default 7")}}}},
+             {}, true),
     };
 }
 
@@ -192,6 +202,7 @@ QJsonObject Server::callTool(const QString &name, const QJsonObject &args)
                                                                  args.value(QLatin1String("content")).toString(),
                                                                  args.value(QLatin1String("task_id")).toString(), tags}, false}},
         {QStringLiteral("append_to_note"), {QStringLiteral("AppendToNote"), {id, args.value(QLatin1String("text")).toString()}, true}},
+        {QStringLiteral("get_stats"), {QStringLiteral("Stats"), {std::max(0, args.value(QLatin1String("days")).toInt(7))}, false}},
     };
     const auto it = calls.constFind(name);
     if (it == calls.constEnd())

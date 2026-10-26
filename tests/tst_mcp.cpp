@@ -98,7 +98,7 @@ private slots:
             QVERIFY(!t.toObject().value("description").toString().isEmpty());
         }
         QCOMPARE(names, QStringList({"get_today", "list_tasks", "get_task", "get_current", "add_task", "complete_task", "start_work",
-                                     "stop_work", "schedule_task", "search_notes", "get_note", "add_note", "append_to_note"}));
+                                     "stop_work", "schedule_task", "search_notes", "get_note", "add_note", "append_to_note", "get_stats"}));
         QVERIFY(tools.at(names.indexOf("search_notes")).toObject().value("annotations").toObject().value("readOnlyHint").toBool());
         QVERIFY(!tools.at(names.indexOf("add_note")).toObject().value("annotations").toObject().value("readOnlyHint").toBool());
         // Reads are marked read-only so clients can allow them without asking.
@@ -152,6 +152,19 @@ private slots:
         QVERIFY(isToolError(*server.handle(request("tools/call", {{"name", "append_to_note"}, {"arguments", QJsonObject{{"id", "x"}, {"text", " "}}}}))));
         QVERIFY(isToolError(*server.handle(request("tools/call", {{"name", "add_note"}, {"arguments", QJsonObject{{"title", ""}}}}))));
         QCOMPARE(backend.calls.size(), before);
+    }
+
+    void statsToolMapsToTheDBusApi()
+    {
+        FakeBackend backend;
+        backend.answers = {{"Stats", "{}"}};
+        Server server(&backend);
+        server.handle(request("tools/call", {{"name", "get_stats"}, {"arguments", QJsonObject{}}}));
+        QCOMPARE(backend.calls.last(), qMakePair(QStringLiteral("Stats"), QVariantList({7})));
+        server.handle(request("tools/call", {{"name", "get_stats"}, {"arguments", QJsonObject{{"days", 0}}}}));
+        QCOMPARE(backend.calls.last().second, QVariantList({0}));
+        server.handle(request("tools/call", {{"name", "get_stats"}, {"arguments", QJsonObject{{"days", -3}}}}));
+        QCOMPARE(backend.calls.last().second, QVariantList({0}));
     }
 
     void toolCallValidationAndFailures()

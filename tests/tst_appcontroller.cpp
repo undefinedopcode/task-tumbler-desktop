@@ -635,6 +635,37 @@ private slots:
         m_app->setSetting("external_writes", true);
     }
 
+    void statsAndDBusStats()
+    {
+        QVERIFY(m_app->stats(7).value("tasks").toList().isEmpty());
+
+        const QString id = m_app->createTask({{"title", "Write report"}, {"time_estimate_minutes", 30}});
+        const qint64 start = m_app->now() - 3 * 24 * 3600000LL;
+        QVERIFY(QSqlQuery(m_db->handle()).exec(QStringLiteral(
+            "INSERT INTO work_logs (id, task_id, started_at, ended_at, duration_minutes, created_at) VALUES ('w1', '%1', %2, %3, 45, %2)")
+            .arg(id).arg(start).arg(start + 45 * 60000)));
+        QVERIFY(m_app->setTaskStatus(id, "completed"));
+
+        const QVariantMap week = m_app->stats(7);
+        QCOMPARE(week.value("bars").toList().size(), 7);
+        QVERIFY(!week.value("weekly").toBool());
+        QCOMPARE(week.value("workedMinutes").toInt(), 45);
+        QCOMPARE(week.value("finishedTasks").toInt(), 1);
+        QCOMPARE(week.value("tasks").toList().first().toMap().value("title").toString(), QStringLiteral("Write report"));
+        QCOMPARE(week.value("estimates").toMap().value("ratio").toDouble(), 1.5);
+        QCOMPARE(week.value("hours").toList().size(), 24);
+
+        // Everything starts at the first activity; long ranges go weekly.
+        QCOMPARE(m_app->stats(0).value("from").toString(),
+                 QDateTime::fromMSecsSinceEpoch(start, m_app->zone()).date().toString(Qt::ISODate));
+        QVERIFY(m_app->stats(90).value("weekly").toBool());
+
+        DBusApi api(m_app.get());
+        const QJsonObject stats = QJsonDocument::fromJson(api.Stats(7).toUtf8()).object();
+        QCOMPARE(stats.value("workedMinutes").toInt(), 45);
+        QVERIFY(stats.value("hours").toArray().size() <= 2); // only the hours with work in them
+    }
+
     void dbusApiAndWriteSwitch()
     {
         DBusApi api(m_app.get());

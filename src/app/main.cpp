@@ -199,11 +199,15 @@ int main(int argc, char *argv[])
     if (parser.isSet(captureOption))
         Q_EMIT controller.showCaptureRequested();
 
-    // Development aid: TUMBLER_SCREENSHOT=out.png [TUMBLER_PAGE=tasks]
+    // Development aid: TUMBLER_SCREENSHOT=out.png [TUMBLER_PAGE=tasks] [TUMBLER_SHOT_SIZE=WxH]
     // renders a page, saves it and quits. Use with QT_QPA_PLATFORM=offscreen.
     // "today|plan" runs steps 700 ms apart, like clicking through.
     if (sandboxed) {
         const QStringList steps = qEnvironmentVariable("TUMBLER_PAGE", QStringLiteral("today")).split(QLatin1Char('|'));
+        // TUMBLER_SHOT_SIZE=1100x2400 for a taller look at long pages.
+        const QStringList size = qEnvironmentVariable("TUMBLER_SHOT_SIZE").split(QLatin1Char('x'));
+        if (size.size() == 2 && size[0].toInt() > 0 && size[1].toInt() > 0)
+            window->resize(size[0].toInt(), size[1].toInt());
         window->show();
         for (qsizetype i = 0; i < steps.size(); ++i) {
             QTimer::singleShot(300 + int(i) * 700, window, [window, step = steps.at(i)] {

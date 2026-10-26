@@ -108,6 +108,20 @@ QString DBusApi::Notes(const QString &search, const QString &tag)
     return json(out);
 }
 
+QString DBusApi::Stats(int days)
+{
+    QVariantMap s = m_app->stats(days);
+    // Only the hours with something in them.
+    QVariantList hours;
+    for (const QVariant &v : s.value(QStringLiteral("hours")).toList()) {
+        const QVariantMap h = v.toMap();
+        if (h.value(QStringLiteral("minutes")).toInt() > 0 || !h.value(QStringLiteral("energy")).isNull())
+            hours.append(h);
+    }
+    s.insert(QStringLiteral("hours"), hours);
+    return json(s);
+}
+
 QString DBusApi::Note(const QString &id)
 {
     QVariantMap n = m_app->noteDetail(id);

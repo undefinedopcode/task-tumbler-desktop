@@ -7,6 +7,7 @@ The architecture and roadmap are in `../task-tumbler/docs/desktop-model.md`.
 ## Status: Phase 4 (connected) + notes
 
 - **Notes** (Ctrl+6): markdown notes with a live preview, tags, a colour, and an optional link to a task. They're searchable as you type (every word, matched as a prefix, title matches first) and can be exported as `.md`. They save themselves as you type, and deleting one can be undone. A task's page lists its notes and can start one. The task field formerly called "Notes" is now "Details".
+- **Stats** (Ctrl+7): for a week, a month, three months or all time. Shows time worked and things finished per day (per week over longer ranges), the hours you work best with your average energy at each, how long finished tasks took against their estimates (the median, overall and by size and category), open tasks that keep getting moved, and where the time went task by task.
 
 
 - **Linear:** issues assigned to you come in as tasks (Todo and In Progress, optionally Backlog, optionally only some teams), with a button to open the issue. Finishing one here moves it to the team's Done state in Linear within seconds. Issues completed, cancelled or reassigned in Linear are closed here. Deleting a Linear task here keeps it deleted. The personal API key is kept in the keyring.
@@ -42,7 +43,7 @@ Phase 3:
 - **CLI:** `task-tumbler --add "call mum tomorrow at 6pm"` captures into the running instance.
 - **KRunner** (enable it in Settings): `tt <anything>` captures. Typing part of a task's name lets you open, start or finish it.
 - **MCP server:** `task-tumbler --mcp` speaks the Model Context Protocol on stdio and drives the running app over D-Bus, so agents' changes are live and undoable.
-  - Tools: get_today, list_tasks, get_task, get_current, add_task, complete_task, start_work, stop_work, schedule_task, and for notes search_notes, get_note, add_note, append_to_note (D-Bus: `Notes`, `Note`, `AddNote`, `AppendToNote`).
+  - Tools: get_today, list_tasks, get_task, get_current, add_task, complete_task, start_work, stop_work, schedule_task, and for notes search_notes, get_note, add_note, append_to_note (D-Bus: `Notes`, `Note`, `AddNote`, `AppendToNote`), and get_stats (D-Bus: `Stats`).
   - For Claude Code: `claude mcp add task-tumbler -- task-tumbler --mcp`.
   - Settings → "Let other apps change tasks" makes D-Bus, KRunner and MCP read-only.
 

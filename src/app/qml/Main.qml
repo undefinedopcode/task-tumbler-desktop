@@ -25,7 +25,8 @@ Kirigami.ApplicationWindow {
             settings: settingsPage,
             onboarding: onboardingPage,
             energy: energyPage,
-            notes: notesPage
+            notes: notesPage,
+            stats: statsPage
         }
         if (name === "unfocus") {
             AppController.focusMode = false
@@ -152,6 +153,13 @@ Kirigami.ApplicationWindow {
                 checked: root.currentPage === "notes"
                 shortcut: "Ctrl+6"
                 onTriggered: root.showPage("notes")
+            },
+            Kirigami.Action {
+                text: i18n("Stats")
+                icon.name: "view-statistics"
+                checked: root.currentPage === "stats"
+                shortcut: "Ctrl+7"
+                onTriggered: root.showPage("stats")
             },
             Kirigami.Action {
                 text: i18n("Categories")
@@ -336,6 +344,10 @@ Kirigami.ApplicationWindow {
     Component {
         id: notesPage
         NotesPage { onOpenNote: noteId => root.openNote(noteId) }
+    }
+    Component {
+        id: statsPage
+        StatsPage { onOpenTask: taskId => root.openTask(taskId) }
     }
     Component {
         id: noteEditorPage

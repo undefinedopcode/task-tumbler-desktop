@@ -17,6 +17,7 @@ tumbler_add_test(tst_importer)
 tumbler_add_test(tst_operations)
 tumbler_add_test(tst_sync)
 tumbler_add_test(tst_notes)
+tumbler_add_test(tst_stats)
 tumbler_add_test(tst_planner)
 tumbler_add_test(tst_capture)
 tumbler_add_test(tst_reminders)
@@ -28,7 +29,7 @@ if(BUILD_APP)
     set(APP_DIR ${PROJECT_SOURCE_DIR}/src/app)
     qt_add_executable(tst_appcontroller tst_appcontroller.cpp
         ${APP_DIR}/appcontroller.h ${APP_DIR}/appcontroller.cpp ${APP_DIR}/appcontroller_ai.cpp
-        ${APP_DIR}/appcontroller_desktop.cpp ${APP_DIR}/appcontroller_external.cpp ${APP_DIR}/appcontroller_notes.cpp
+        ${APP_DIR}/appcontroller_desktop.cpp ${APP_DIR}/appcontroller_external.cpp ${APP_DIR}/appcontroller_notes.cpp ${APP_DIR}/appcontroller_stats.cpp
         ${APP_DIR}/desktop/dbusapi.h ${APP_DIR}/desktop/dbusapi.cpp
         ${APP_DIR}/remote/remotehub.h ${APP_DIR}/remote/remotehub.cpp
         ${APP_DIR}/sync/synchub.h ${APP_DIR}/sync/synchub.cpp

@@ -43,6 +43,10 @@ public Q_SLOTS:
     Q_SCRIPTABLE QString AddNote(const QString &title, const QString &content, const QString &taskId, const QString &tags);
     Q_SCRIPTABLE bool AppendToNote(const QString &id, const QString &text);
 
+    // Looking back over the last `days` days including today (0: everything):
+    // time worked, things finished, busy hours, estimate accuracy.
+    Q_SCRIPTABLE QString Stats(int days);
+
 private:
     bool mayWrite();
     AppController *m_app;

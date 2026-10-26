@@ -20,6 +20,7 @@ qt_add_library(tumbler-core STATIC
     dayplanner.h dayplanner.cpp
     sync.h sync.cpp
     notes.h notes.cpp
+    stats.h stats.cpp
 )
 
 qt_add_resources(tumbler-core "migrations"
