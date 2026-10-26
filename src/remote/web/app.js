@@ -71,7 +71,10 @@ async function api(path, { method = 'GET', body } = {}) {
 
 // ---- state & rendering ----
 let snap = null;
+let day = null; // /api/closeout, while that view is open
 let timerHandle = 0;
+// "today", or "closeout" at #closeout (where the evening notification lands).
+const view = () => (location.hash === '#closeout' ? 'closeout' : 'today');
 
 function setLink(state) {
   $('link').className = 'link ' + state;
@@ -151,6 +154,8 @@ function section(title, nodes) {
 function render() {
   const t = snap.today;
   $('date').textContent = t.dateLabel || '';
+  $('heading').textContent = view() === 'closeout' ? 'Close out the day' : 'Today';
+  $('capture').hidden = view() === 'closeout';
   const w = snap.working || {};
   $('working').hidden = !w.taskId;
   if (w.taskId) $('workingTitle').textContent = w.title;
@@ -164,10 +169,17 @@ function render() {
   tick();
   if (w.startedAt) timerHandle = setInterval(tick, 1000);
 
-  $('energy').hidden = !(snap.energy && snap.energy.due) || !!w.taskId;
+  $('energy').hidden = !(snap.energy && snap.energy.due) || !!w.taskId || view() === 'closeout';
 
+  if (view() === 'closeout') return renderCloseOut();
   const lists = $('lists');
   lists.replaceChildren(...[
+    t.closeOutDue ? el('section', { class: 'card evening' },
+      el('div', { class: 'strong' }, 'Winding down?'),
+      el('div', { class: 'muted small' }, 'Take a couple of minutes to close out the day.'),
+      el('div', { class: 'row wrap' },
+        el('button', { class: 'primary', onclick: () => { location.hash = 'closeout'; } }, 'Close out'),
+        button('Not today', { type: 'finishCloseOut', quietly: true }))) : null,
     section('Right now', t.now.map(agendaItem)),
     section("Didn't happen yet", t.overdue.map(agendaItem)),
     section('Coming up', t.upcoming.map(agendaItem)),
@@ -177,10 +189,109 @@ function render() {
   if (!lists.childElementCount && !w.taskId) lists.append(el('div', { class: 'empty' }, 'A clear day. Capture anything below.'));
 }
 
+// ---- closing out the day ----
+
+// The note box lives across renders so typing is never interrupted.
+const noteBox = el('textarea', { id: 'dayNote', rows: '3', placeholder: 'What helped, what got in the way, what’s on your mind… (saved to Notes)' });
+let noteTimer = 0;
+noteBox.addEventListener('input', () => {
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(saveNote, 800);
+});
+async function saveNote() {
+  clearTimeout(noteTimer);
+  noteTimer = 0;
+  try { await api('/api/command', { method: 'POST', body: { type: 'dayNote', text: noteBox.value } }); }
+  catch { banner('Couldn’t save the note just now; it’s still here.'); }
+}
+
+// Letting go cancels the task, and the phone has no undo: a second tap confirms.
+function letGoButton(command) {
+  let armed = 0;
+  const b = el('button', {
+    class: 'danger',
+    onclick: async () => {
+      if (!armed) {
+        b.textContent = 'Sure?';
+        armed = setTimeout(() => { armed = 0; b.textContent = 'Let it go'; }, 3000);
+        return;
+      }
+      clearTimeout(armed);
+      b.disabled = true;
+      await run(command);
+    },
+  }, 'Let it go');
+  return b;
+}
+
+function leftoverItem(l) {
+  const command = (choice) => ({ type: 'leftover', kind: l.kind, id: l.id, choice });
+  const when = l.kind === 'routine' ? (l.timeless ? 'Routine, any time' : 'Routine at ' + fmtTime(l.start))
+    : (l.earlier ? l.dayLabel + ' ' : '') + fmtTime(l.start) + (l.bumps > 1 ? ` · moved ${l.bumps}×` : '');
+  const actions = l.kind === 'routine'
+    ? [button('Skip today', command('skip')), button('Done', command('done'), { primary: true })]
+    : [button('Tomorrow', command('tomorrow'), { primary: true }), button('To the pile', command('pile')),
+       letGoButton(command('drop')), button('Did it', command('done'))];
+  return el('div', { class: 'item leftover' + (l.earlier ? ' earlier' : '') },
+    el('div', { class: 'what' }, el('div', { class: 'title' }, l.title), el('div', { class: 'sub' }, when)),
+    el('div', { class: 'actions' }, actions));
+}
+
+function renderCloseOut() {
+  const d = day || {};
+  const wins = d.wins || [], progress = d.progress || [], left = d.leftovers || [], tomorrow = d.tomorrow || {};
+  const headline = wins.length ? `You finished ${wins.length} thing${wins.length === 1 ? '' : 's'} today`
+    : progress.length ? 'You moved things forward today' : 'A quiet day';
+  const worked = d.workedMinutes ? `${Math.floor(d.workedMinutes / 60) ? Math.floor(d.workedMinutes / 60) + ' h ' : ''}${d.workedMinutes % 60} min of focused time logged.`
+    : (!wins.length && !progress.length ? 'Some days are like that. Rest counts too.' : '');
+  const tparts = [];
+  if (tomorrow.blocks) tparts.push(`${tomorrow.blocks} block${tomorrow.blocks === 1 ? '' : 's'}`);
+  if (tomorrow.events) tparts.push(`${tomorrow.events} event${tomorrow.events === 1 ? '' : 's'}`);
+  if (tomorrow.routines) tparts.push(`${tomorrow.routines} routine${tomorrow.routines === 1 ? '' : 's'}`);
+  if (document.activeElement !== noteBox && !noteTimer) noteBox.value = d.note || '';
+
+  $('lists').replaceChildren(...[
+    el('p', {}, el('button', { class: 'link-button', onclick: () => { location.hash = ''; } }, '‹ Today')),
+    el('section', { class: 'card' },
+      el('div', { class: 'strong' }, headline),
+      worked ? el('div', { class: 'muted small' }, worked) : null,
+      wins.map((w) => el('div', { class: 'item' }, el('div', { class: 'tick' }, '✓'),
+        el('div', { class: 'what' }, el('div', { class: 'title' }, w.title), w.routine ? el('div', { class: 'sub' }, 'Routine') : null))),
+      progress.map((p) => el('div', { class: 'item' }, el('div', { class: 'tick muted' }, '◔'),
+        el('div', { class: 'what' }, el('div', { class: 'title' }, p.title), el('div', { class: 'sub' }, `Made progress: ${p.minutes} min today`))))),
+    left.length ? el('section', {},
+      el('h2', {}, 'Still open'),
+      el('p', { class: 'muted small' }, 'None of these has to happen today. Pick where each one goes.'),
+      el('div', { class: 'card' }, left.map(leftoverItem),
+        left.length > 1 ? el('div', { class: 'row wrap' }, button('Clear the rest', { type: 'clearLeftovers' })) : null)) : null,
+    el('section', {}, el('h2', {}, 'Anything to remember about today?'), el('div', { class: 'card' }, noteBox)),
+    el('section', {}, el('h2', {}, 'Tomorrow'), el('div', { class: 'card' },
+      el('div', { class: 'strong' }, tomorrow.label || ''),
+      el('div', { class: 'muted small' }, (tparts.join(', ') || 'Nothing planned yet')
+        + (tomorrow.firstTitle ? ` · first up: ${tomorrow.firstTitle} at ${fmtTime(tomorrow.firstAt)}` : '')),
+      el('div', { class: 'muted small' }, 'Plan tomorrow on the computer (Plan my day → Tomorrow).'))),
+    el('button', {
+      class: 'primary wide',
+      onclick: async () => {
+        if (noteTimer) await saveNote();
+        await run({ type: 'finishCloseOut' });
+        location.hash = '';
+      },
+    }, d.closed ? 'Day closed ✓' : 'Close the day'),
+  ].filter(Boolean));
+}
+
+window.addEventListener('hashchange', async () => {
+  if (view() !== 'closeout' && noteTimer) await saveNote();
+  window.scrollTo(0, 0);
+  refresh();
+});
+
 async function refresh() {
   if (!token) return showPair();
   try {
     snap = await api('/api/snapshot');
+    day = view() === 'closeout' ? await api('/api/closeout') : null;
     $('pair').hidden = true;
     render();
     setLink('live');
@@ -346,6 +457,7 @@ $('pushButton').addEventListener('click', async () => {
 $('menuButton').addEventListener('click', () => { pushStatus(); $('menu').showModal(); });
 $('closeMenu').addEventListener('click', () => $('menu').close());
 $('refreshButton').addEventListener('click', () => { $('menu').close(); refresh(); });
+$('closeOutButton').addEventListener('click', () => { $('menu').close(); location.hash = 'closeout'; });
 $('unpairButton').addEventListener('click', async () => {
   try {
     const reg = await navigator.serviceWorker.ready;
@@ -361,7 +473,10 @@ $('unpairButton').addEventListener('click', async () => {
 
 if ('serviceWorker' in navigator && window.isSecureContext) {
   navigator.serviceWorker.register('/sw.js');
-  navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'push') refresh(); });
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'push') refresh();
+    if (e.data && e.data.type === 'open' && e.data.hash !== undefined) location.hash = e.data.hash;
+  });
 }
 
 refresh();

@@ -21,6 +21,7 @@ Phase 3b (phone companion):
 
 - **On your phone, over your tailnet:** Today with Start / Done / Later / +15, Ready to Work, the running timer, an energy check-in, and quick capture with a live preview. Captures made while the computer is asleep wait on the phone and are sent later, without duplicates.
 - **Notifications with buttons on Android:** Done, +15 min, Later, Skip. They go to the phone when you're away from the computer (idle or screen locked), or always, or never, as you choose in Settings.
+- **Close out the day from the phone:** the same close-out as on the computer: what got done, Tomorrow / To the pile / Let it go (tap twice, as there's no undo on the phone) / Did it for each loose end, Clear the rest, the day note and a look at tomorrow. The evening notification opens it, or "Not today" closes the day from the notification. Planning tomorrow stays on the computer.
 - **How it works:**
   - The app serves a small web app and API on `127.0.0.1:7789`.
   - `tailscale serve` puts it on your tailnet with HTTPS.

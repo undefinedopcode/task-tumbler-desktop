@@ -62,6 +62,7 @@ public:
 
     // remote::Backend
     QJsonObject snapshot() override;
+    QJsonObject closeOut() override;
     QJsonObject command(const QJsonObject &command, QString *error) override;
     QJsonObject preview(const QString &text) override;
     QByteArray vapidPublicKey() override { return m_vapid.publicKey; }

@@ -22,6 +22,8 @@ class Backend
 public:
     virtual ~Backend() = default;
     virtual QJsonObject snapshot() = 0;
+    // The day so far, for closing it out (AppController::closeOut()).
+    virtual QJsonObject closeOut() = 0;
     // {"type": "...", ...}; returns a result object, or sets error.
     virtual QJsonObject command(const QJsonObject &command, QString *error) = 0;
     virtual QJsonObject preview(const QString &text) = 0;
@@ -36,6 +38,7 @@ public:
 //
 //   GET  /, /app.js, ...    the web app (no data in it, so no auth)
 //   GET  /api/snapshot      today, the running timer, energy
+//   GET  /api/closeout      what got done, what's left, tomorrow
 //   GET  /api/events        a stream of "changed" events (text/event-stream)
 //   POST /api/command       {type, ...}: capture, done, bump, start, ...
 //   POST /api/preview       {text}: what quick capture would understand

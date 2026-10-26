@@ -923,6 +923,37 @@ private slots:
         QVERIFY(!again.state().value("pairUrl").toString().endsWith(token));
     }
 
+    void remoteHubClosesOutTheDay()
+    {
+        QTemporaryDir dir;
+        RemoteHub hub(m_app.get(), dir.filePath("remote.json"));
+        const QString id = m_app->createTask({{"title", "Left over"}, {"time_estimate_minutes", 30}});
+        QVERIFY(m_app->scheduleAt(id, m_app->now() - 2 * 3600000LL, 30));
+        const QString done = m_app->createTask({{"title", "Done one"}});
+        QVERIFY(m_app->setTaskStatus(done, "completed"));
+
+        QJsonObject day = hub.closeOut();
+        QCOMPARE(day.value("wins").toArray().size(), 1);
+        const QJsonArray left = day.value("leftovers").toArray();
+        QCOMPARE(left.size(), 1);
+
+        QString error;
+        QVERIFY(hub.command({{"type", "dayNote"}, {"text", ""}}, &error).value("ok").toBool()); // nothing yet: fine
+        QVERIFY(hub.command({{"type", "dayNote"}, {"text", "Tired but OK"}}, &error).value("ok").toBool());
+        QCOMPARE(hub.closeOut().value("note").toString(), QStringLiteral("Tired but OK"));
+
+        const QJsonObject l = left[0].toObject();
+        QVERIFY(hub.command({{"type", "leftover"}, {"kind", l.value("kind")}, {"id", l.value("id")}, {"choice", "pile"}}, &error).value("ok").toBool());
+        QVERIFY(hub.closeOut().value("leftovers").toArray().isEmpty());
+        hub.command({{"type", "clearLeftovers"}}, &error); // nothing left to clear
+        QVERIFY(!error.isEmpty());
+
+        error.clear();
+        QVERIFY(hub.command({{"type", "finishCloseOut"}, {"quietly", true}}, &error).value("ok").toBool());
+        QVERIFY(hub.closeOut().value("closed").toBool());
+        QVERIFY(hub.snapshot().value("today").toObject().contains("closeOutDue"));
+    }
+
     void remoteHubServesWhenEnabled()
     {
         QTemporaryDir dir;

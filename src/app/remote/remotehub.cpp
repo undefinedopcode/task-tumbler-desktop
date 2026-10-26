@@ -310,6 +310,11 @@ QJsonObject RemoteHub::snapshot()
     };
 }
 
+QJsonObject RemoteHub::closeOut()
+{
+    return json(m_app->closeOut());
+}
+
 QJsonObject RemoteHub::command(const QJsonObject &c, QString *error)
 {
     const QString type = c.value(QLatin1String("type")).toString();
@@ -348,6 +353,17 @@ QJsonObject RemoteHub::command(const QJsonObject &c, QString *error)
         ok = m_app->setTaskStatus(taskId, QStringLiteral("completed"));
     } else if (type == QLatin1String("scheduleNext")) {
         ok = m_app->scheduleNextSlot(taskId);
+    } else if (type == QLatin1String("leftover")) {
+        ok = m_app->resolveLeftover(c.value(QLatin1String("kind")).toString(), id, c.value(QLatin1String("choice")).toString());
+    } else if (type == QLatin1String("clearLeftovers")) {
+        ok = m_app->clearLeftovers();
+    } else if (type == QLatin1String("dayNote")) {
+        // Saved as typed; an empty note before there is one is nothing to save.
+        const QString text = c.value(QLatin1String("text")).toString().left(10000);
+        ok = !m_app->saveDayNote(text).isEmpty() || text.trimmed().isEmpty();
+    } else if (type == QLatin1String("finishCloseOut")) {
+        m_app->finishCloseOut(c.value(QLatin1String("quietly")).toBool());
+        ok = true;
     } else if (type == QLatin1String("energy")) {
         ok = m_app->logEnergy(std::clamp(c.value(QLatin1String("level")).toInt(), 1, 10));
     } else {

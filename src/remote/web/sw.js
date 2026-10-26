@@ -2,7 +2,7 @@
 // into notifications whose buttons act without opening the app.
 'use strict';
 
-const SHELL = 'tumbler-shell-v1';
+const SHELL = 'tumbler-shell-v2';
 const FILES = ['/', '/index.html', '/app.js', '/app.css', '/icon.svg', '/manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
@@ -71,8 +71,14 @@ self.addEventListener('notificationclick', (e) => {
       }).catch(() => null);
       if (res && res.ok) return;
     }
+    // Some notifications open a view: the evening one opens #closeout.
+    const url = data.url || '/';
+    const hash = url.includes('#') ? url.slice(url.indexOf('#') + 1) : '';
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    if (windows.length) return windows[0].focus();
-    return self.clients.openWindow('/');
+    if (windows.length) {
+      windows[0].postMessage({ type: 'open', hash });
+      return windows[0].focus();
+    }
+    return self.clients.openWindow(url);
   })());
 });

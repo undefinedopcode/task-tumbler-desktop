@@ -94,9 +94,14 @@ void Reminders::nudgeCloseOut(bool desktop, bool phone)
     const QString title = i18n("Winding down?");
     const QString text = i18n("Take a couple of minutes to close out the day: what got done, and where the rest goes.");
     if (phone) {
+        // "Close out" has no command, so tapping it opens the close-out view.
         m_hub->push({{QStringLiteral("title"), title},
                      {QStringLiteral("body"), text},
                      {QStringLiteral("tag"), QStringLiteral("tt-closeout")},
+                     {QStringLiteral("url"), QStringLiteral("/#closeout")},
+                     {QStringLiteral("actions"), QJsonArray{QJsonObject{{QStringLiteral("action"), QStringLiteral("open")}, {QStringLiteral("title"), i18n("Close out")}},
+                                                            QJsonObject{{QStringLiteral("action"), QStringLiteral("later")}, {QStringLiteral("title"), i18n("Not today")}}}},
+                     {QStringLiteral("commands"), QJsonObject{{QStringLiteral("later"), QJsonObject{{QStringLiteral("type"), QStringLiteral("finishCloseOut")}, {QStringLiteral("quietly"), true}}}}},
                      {QStringLiteral("event"), QStringLiteral("closeOut")}},
                     QStringLiteral("normal"));
     }

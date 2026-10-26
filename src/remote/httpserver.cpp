@@ -257,6 +257,8 @@ void HttpServer::handle(QTcpSocket *socket, const Request &req)
     const QJsonObject body = QJsonDocument::fromJson(req.body).object();
     if (path == "/api/snapshot" && req.method == "GET") {
         respondJson(socket, 200, m_backend->snapshot());
+    } else if (path == "/api/closeout" && req.method == "GET") {
+        respondJson(socket, 200, m_backend->closeOut());
     } else if (path == "/api/events" && req.method == "GET") {
         openStream(socket);
     } else if (path == "/api/command" && req.method == "POST") {

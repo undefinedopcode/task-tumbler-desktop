@@ -24,6 +24,7 @@ class FakeBackend : public Backend
 {
 public:
     QJsonObject snapshot() override { return {{"today", QJsonObject{{"date", "2026-10-25"}}}}; }
+    QJsonObject closeOut() override { return {{"date", "2026-10-25"}, {"leftovers", QJsonArray()}}; }
     QJsonObject command(const QJsonObject &c, QString *error) override
     {
         commands.append(c);
@@ -247,6 +248,10 @@ private slots:
         QCOMPARE(ok.status, 200);
         QCOMPARE(QJsonDocument::fromJson(ok.body).object().value("today").toObject().value("date").toString(), QStringLiteral("2026-10-25"));
         QCOMPARE(ok.headers.value("cache-control"), QByteArray("no-store"));
+
+        const Response day = http(port(), "GET", "/api/closeout");
+        QCOMPARE(day.status, 200);
+        QVERIFY(QJsonDocument::fromJson(day.body).object().value("leftovers").isArray());
     }
 
     void wrongTokensGetBlocked()

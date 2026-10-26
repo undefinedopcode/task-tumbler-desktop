@@ -72,6 +72,19 @@ dialog { border: 1px solid var(--line); border-radius: 16px; background: var(--c
 dialog button { width: 100%; margin-top: 8px; }
 .empty { text-align: center; padding: 30px 10px; color: var(--muted); }
 
+button.link-button { border: none; background: none; color: var(--accent); padding: 4px 0; min-height: 0; }
+button.wide { width: 100%; margin: 18px 0 8px; }
+.evening { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--card)); }
+.tick { width: 20px; flex: none; text-align: center; color: var(--good); }
+.leftover { flex-wrap: wrap; row-gap: 6px; }
+.leftover .what { flex: 1 1 100%; }
+.leftover .actions { flex: 1 1 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+.leftover.earlier .sub { color: var(--warn); }
+#dayNote {
+  width: 100%; font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--text); resize: vertical;
+}
+
 /* Phones: buttons get their own row under the title instead of squeezing it. */
 @media (max-width: 560px) {
   .item { flex-wrap: wrap; row-gap: 6px; }
