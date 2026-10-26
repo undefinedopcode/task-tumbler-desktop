@@ -1,26 +1,37 @@
 #pragma once
 
-#include <QDBusContext>
 #include <QObject>
+#ifdef TUMBLER_HAVE_DBUS
+#include <QDBusContext>
+#endif
 
 namespace tumbler {
 
 class AppController;
 
-// Task Tumbler on the session bus, for scripts, the CLI and the MCP server:
+// What other programs can do with Task Tumbler. The MCP server and a second
+// launch reach it over the app's local socket (ipc.h) on every platform; on
+// Linux it's also on the session bus for scripts and KRunner:
 //   service org.kde.tasktumbler, path /Tasks, interface org.kde.tasktumbler.Tasks
 // Complex results are JSON strings, so any language can use them:
 //   qdbus org.kde.tasktumbler /Tasks org.kde.tasktumbler.Tasks.Capture "call mum tomorrow"
 // Writes go through the same undoable path as the UI, and are refused when
 // Settings > "Let other apps change tasks" is off.
-class DBusApi : public QObject, protected QDBusContext
+class ExternalApi : public QObject
+#ifdef TUMBLER_HAVE_DBUS
+    , protected QDBusContext
+#endif
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.kde.tasktumbler.Tasks")
 
 public:
-    explicit DBusApi(AppController *app, QObject *parent = nullptr);
+    explicit ExternalApi(AppController *app, QObject *parent = nullptr);
+#ifdef TUMBLER_HAVE_DBUS
     bool registerOnBus();
+#endif
+    // Why the last call failed, if it did; reading it clears it.
+    QString takeError();
 
 public Q_SLOTS:
     Q_SCRIPTABLE QString Today();
@@ -64,8 +75,11 @@ public Q_SLOTS:
     Q_SCRIPTABLE bool FinishReview();
 
 private:
+    enum class Failure { Denied, BadArgument };
     bool mayWrite();
+    void fail(Failure kind, const QString &message);
     AppController *m_app;
+    QString m_error;
 };
 
 } // namespace tumbler

@@ -10,7 +10,7 @@ qt_add_executable(task-tumbler
     desktop/launcher.h desktop/launcher.cpp
     desktop/idlewatch.h desktop/idlewatch.cpp
     desktop/focusguard.h desktop/focusguard.cpp
-    desktop/dbusapi.h desktop/dbusapi.cpp
+    desktop/externalapi.h desktop/externalapi.cpp
     desktop/krunner.h desktop/krunner.cpp
     remote/remotehub.h remote/remotehub.cpp
     sync/synchub.h sync/synchub.cpp
@@ -66,13 +66,16 @@ target_link_libraries(task-tumbler PRIVATE
     tumbler-core
     tumbler-ai
     tumbler-mcp
+    tumbler-ipc
     tumbler-remote
     tumbler-sync
     Qt6Keychain::Qt6Keychain
     KF6::KIOGui KF6::Service KF6::IdleTime
     Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::DBus
-    KF6::CoreAddons KF6::I18n KF6::I18nQml KF6::DBusAddons KF6::Notifications KF6::StatusNotifierItem KF6::GlobalAccel
+    KF6::CoreAddons KF6::I18n KF6::I18nQml KF6::Notifications KF6::StatusNotifierItem KF6::GlobalAccel
 )
+
+target_compile_definitions(task-tumbler PRIVATE TUMBLER_HAVE_DBUS)
 
 # Running from the build tree: KNotification looks for the notifyrc under
 # $XDG_DATA_DIRS/knotifications6, so stage a copy and point the app at it.

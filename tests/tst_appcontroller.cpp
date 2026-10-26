@@ -1,5 +1,6 @@
 #include "appcontroller.h"
-#include "desktop/dbusapi.h"
+#include "desktop/externalapi.h"
+#include "ipc.h"
 #include "keystore.h"
 #include "remotehub.h"
 #include "synchub.h"
@@ -605,7 +606,7 @@ private slots:
 
     void dbusNotes()
     {
-        DBusApi api(m_app.get());
+        ExternalApi api(m_app.get());
         const QString task = m_app->createTask({{"title", "Release"}});
         const QString id = api.AddNote("Release <checklist>", "tag & push", task, "work, release");
         QVERIFY(!id.isEmpty());
@@ -789,7 +790,7 @@ private slots:
                  QDateTime::fromMSecsSinceEpoch(start, m_app->zone()).date().toString(Qt::ISODate));
         QVERIFY(m_app->stats(90).value("weekly").toBool());
 
-        DBusApi api(m_app.get());
+        ExternalApi api(m_app.get());
         const QJsonObject stats = QJsonDocument::fromJson(api.Stats(7).toUtf8()).object();
         QCOMPARE(stats.value("workedMinutes").toInt(), 45);
         QVERIFY(stats.value("hours").toArray().size() <= 2); // only the hours with work in them
@@ -797,7 +798,7 @@ private slots:
 
     void dbusApiAndWriteSwitch()
     {
-        DBusApi api(m_app.get());
+        ExternalApi api(m_app.get());
         const QString id = api.Capture("water plants every day");
         QVERIFY(!id.isEmpty());
         const QJsonArray tasks = QJsonDocument::fromJson(api.Tasks("open", "").toUtf8()).array();
@@ -820,7 +821,7 @@ private slots:
 
     void dbusCloseOutAndReview()
     {
-        DBusApi api(m_app.get());
+        ExternalApi api(m_app.get());
         const QString id = m_app->createTask({{"title", "Left over"}, {"time_estimate_minutes", 30}});
         QVERIFY(m_app->scheduleAt(id, m_app->now() - 2 * 3600000LL, 30));
         const QString other = m_app->createTask({{"title", "Not happening"}, {"time_estimate_minutes", 30}});
@@ -863,6 +864,32 @@ private slots:
         QVERIFY(!api.LetGo(id));
         QVERIFY(!QJsonDocument::fromJson(api.CloseOut().toUtf8()).object().isEmpty()); // reads still work
         m_app->setSetting("external_writes", true);
+    }
+
+    void externalApiOverTheSocket()
+    {
+        ExternalApi api(m_app.get());
+        ipc::Server server(&api, [&api] { return api.takeError(); });
+        const auto call = [&](const QByteArray &request) { return QJsonDocument::fromJson(server.handle(request)).object(); };
+
+        QJsonObject r = call(R"({"method":"Capture","args":["water plants ~10m"]})");
+        QVERIFY(r.value("ok").toBool());
+        const QString id = r.value("result").toString();
+        QCOMPARE(m_app->queries().task(id)->title, QStringLiteral("water plants"));
+        QCOMPARE(m_app->undoText(), QStringLiteral("Capture “water plants”"));
+
+        r = call(R"({"method":"Task","args":["no-such-task"]})");
+        QVERIFY(!r.value("ok").toBool());
+        QVERIFY(r.value("error").toString().contains("no task with id"));
+        QVERIFY(call(R"({"method":"Stats","args":[7]})").value("ok").toBool());
+
+        m_app->setSetting("external_writes", false);
+        r = call(R"({"method":"Complete","args":[")" + id.toUtf8() + R"("]})");
+        QVERIFY(!r.value("ok").toBool());
+        QVERIFY(r.value("error").toString().contains("not let other apps"));
+        QVERIFY(call(R"({"method":"Today","args":[]})").value("ok").toBool()); // reads still work
+        m_app->setSetting("external_writes", true);
+        QVERIFY(call(R"({"method":"Complete","args":[")" + id.toUtf8() + R"("]})").value("result").toBool());
     }
 
     void focusMode()

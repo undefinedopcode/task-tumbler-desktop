@@ -1,10 +1,13 @@
-#include "dbusapi.h"
+#include "externalapi.h"
 
 #include "appcontroller.h"
 
-#include <QDBusConnection>
 #include <QJsonDocument>
 #include <QJsonValue>
+#include <utility>
+#ifdef TUMBLER_HAVE_DBUS
+#include <QDBusConnection>
+#endif
 
 namespace tumbler {
 
@@ -15,83 +18,100 @@ QString json(const QVariant &v)
 }
 } // namespace
 
-DBusApi::DBusApi(AppController *app, QObject *parent)
+ExternalApi::ExternalApi(AppController *app, QObject *parent)
     : QObject(parent)
     , m_app(app)
 {
 }
 
-bool DBusApi::registerOnBus()
+#ifdef TUMBLER_HAVE_DBUS
+bool ExternalApi::registerOnBus()
 {
     return QDBusConnection::sessionBus().registerObject(QStringLiteral("/Tasks"), this, QDBusConnection::ExportScriptableSlots);
 }
+#endif
 
-bool DBusApi::mayWrite()
+QString ExternalApi::takeError()
+{
+    return std::exchange(m_error, QString());
+}
+
+void ExternalApi::fail(Failure kind, const QString &message)
+{
+    m_error = message;
+#ifdef TUMBLER_HAVE_DBUS
+    if (calledFromDBus())
+        sendErrorReply(kind == Failure::Denied ? QDBusError::AccessDenied : QDBusError::InvalidArgs, message);
+#else
+    Q_UNUSED(kind)
+#endif
+}
+
+bool ExternalApi::mayWrite()
 {
     if (m_app->externalWritesAllowed())
         return true;
-    if (calledFromDBus())
-        sendErrorReply(QDBusError::AccessDenied, QStringLiteral("Task Tumbler is set to not let other apps change tasks"));
+    fail(Failure::Denied, QStringLiteral("Task Tumbler is set to not let other apps change tasks"));
     return false;
 }
 
-QString DBusApi::Today()
+QString ExternalApi::Today()
 {
     return json(m_app->today());
 }
 
-QString DBusApi::Tasks(const QString &filter, const QString &search)
+QString ExternalApi::Tasks(const QString &filter, const QString &search)
 {
     return json(m_app->externalTasks(filter.isEmpty() ? QStringLiteral("open") : filter, search));
 }
 
-QString DBusApi::Task(const QString &id)
+QString ExternalApi::Task(const QString &id)
 {
     QVariantMap t = m_app->taskDetail(id);
-    if (t.isEmpty() && calledFromDBus())
-        sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("no task with id %1").arg(id));
+    if (t.isEmpty())
+        fail(Failure::BadArgument, QStringLiteral("no task with id %1").arg(id));
     t.remove(QStringLiteral("actions")); // launchers stay private to the app
     return json(t);
 }
 
-QString DBusApi::Current()
+QString ExternalApi::Current()
 {
     return json(m_app->working());
 }
 
-QString DBusApi::Capture(const QString &text)
+QString ExternalApi::Capture(const QString &text)
 {
     if (!mayWrite())
         return {};
     return m_app->capture(text);
 }
 
-bool DBusApi::Complete(const QString &id)
+bool ExternalApi::Complete(const QString &id)
 {
     return mayWrite() && m_app->setTaskStatus(id, QStringLiteral("completed"));
 }
 
-bool DBusApi::StartWork(const QString &id)
+bool ExternalApi::StartWork(const QString &id)
 {
     return mayWrite() && m_app->startWork(id);
 }
 
-bool DBusApi::StopWork()
+bool ExternalApi::StopWork()
 {
     return mayWrite() && m_app->stopWork();
 }
 
-bool DBusApi::ScheduleNextSlot(const QString &id)
+bool ExternalApi::ScheduleNextSlot(const QString &id)
 {
     return mayWrite() && m_app->scheduleNextSlot(id);
 }
 
-void DBusApi::Show()
+void ExternalApi::Show()
 {
     Q_EMIT m_app->showWindowRequested();
 }
 
-QString DBusApi::Notes(const QString &search, const QString &tag)
+QString ExternalApi::Notes(const QString &search, const QString &tag)
 {
     QVariantList out;
     for (const QVariant &v : m_app->notes(search, tag)) {
@@ -108,7 +128,7 @@ QString DBusApi::Notes(const QString &search, const QString &tag)
     return json(out);
 }
 
-QString DBusApi::Stats(int days)
+QString ExternalApi::Stats(int days)
 {
     QVariantMap s = m_app->stats(days);
     // Only the hours with something in them.
@@ -122,22 +142,21 @@ QString DBusApi::Stats(int days)
     return json(s);
 }
 
-QString DBusApi::Note(const QString &id)
+QString ExternalApi::Note(const QString &id)
 {
     QVariantMap n = m_app->noteDetail(id);
-    if (n.isEmpty() && calledFromDBus())
-        sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("no note with id %1").arg(id));
+    if (n.isEmpty())
+        fail(Failure::BadArgument, QStringLiteral("no note with id %1").arg(id));
     n.remove(QStringLiteral("color"));
     return json(n);
 }
 
-QString DBusApi::AddNote(const QString &title, const QString &content, const QString &taskId, const QString &tags)
+QString ExternalApi::AddNote(const QString &title, const QString &content, const QString &taskId, const QString &tags)
 {
     if (!mayWrite())
         return {};
     if (!taskId.isEmpty() && m_app->taskDetail(taskId).isEmpty()) {
-        if (calledFromDBus())
-            sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("no task with id %1").arg(taskId));
+        fail(Failure::BadArgument, QStringLiteral("no task with id %1").arg(taskId));
         return {};
     }
     QStringList tagList;
@@ -149,27 +168,27 @@ QString DBusApi::AddNote(const QString &title, const QString &content, const QSt
                               {QStringLiteral("tags"), tagList}});
 }
 
-bool DBusApi::AppendToNote(const QString &id, const QString &text)
+bool ExternalApi::AppendToNote(const QString &id, const QString &text)
 {
     return mayWrite() && m_app->appendToNote(id, text);
 }
 
-QString DBusApi::CloseOut()
+QString ExternalApi::CloseOut()
 {
     return json(m_app->closeOut());
 }
 
-bool DBusApi::ResolveLeftover(const QString &kind, const QString &id, const QString &choice)
+bool ExternalApi::ResolveLeftover(const QString &kind, const QString &id, const QString &choice)
 {
     return mayWrite() && m_app->resolveLeftover(kind, id, choice);
 }
 
-bool DBusApi::ClearLeftovers()
+bool ExternalApi::ClearLeftovers()
 {
     return mayWrite() && m_app->clearLeftovers();
 }
 
-QString DBusApi::AddToDayNote(const QString &text)
+QString ExternalApi::AddToDayNote(const QString &text)
 {
     if (!mayWrite() || text.trimmed().isEmpty())
         return {};
@@ -184,7 +203,7 @@ QString DBusApi::AddToDayNote(const QString &text)
                               {QStringLiteral("tags"), QStringList{QStringLiteral("day")}}});
 }
 
-bool DBusApi::FinishCloseOut()
+bool ExternalApi::FinishCloseOut()
 {
     if (!mayWrite())
         return false;
@@ -192,17 +211,17 @@ bool DBusApi::FinishCloseOut()
     return true;
 }
 
-bool DBusApi::LetGo(const QString &id)
+bool ExternalApi::LetGo(const QString &id)
 {
     return mayWrite() && m_app->letGo(id);
 }
 
-QString DBusApi::WeekReview()
+QString ExternalApi::WeekReview()
 {
     return json(m_app->weekReview());
 }
 
-bool DBusApi::FinishReview()
+bool ExternalApi::FinishReview()
 {
     if (!mayWrite())
         return false;

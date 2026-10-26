@@ -7,14 +7,14 @@
 
 namespace tumbler::mcp {
 
-// Where tool calls go. In the app this is the running instance's D-Bus API
-// (dbusbackend.h), so agents' changes land on the same undo stack and show
+// Where tool calls go. In the app this is the running instance's external
+// API (socketbackend.h), so agents' changes land on the same undo stack and show
 // up live; in tests it's a fake.
 class Backend
 {
 public:
     virtual ~Backend() = default;
-    // `method` is a D-Bus method of org.kde.tasktumbler.Tasks.
+    // `method` is a method of the app's ExternalApi (externalapi.h).
     virtual QVariant call(const QString &method, const QVariantList &args, QString *error) = 0;
 };
 

@@ -45,7 +45,7 @@ Phase 3:
 - **D-Bus API:** `org.kde.tasktumbler` at `/Tasks`. It has Today, Tasks, Task, Current, Capture, Complete, StartWork, StopWork, ScheduleNextSlot and Show, with JSON results.
 - **CLI:** `task-tumbler --add "call mum tomorrow at 6pm"` captures into the running instance.
 - **KRunner** (enable it in Settings): `tt <anything>` captures. Typing part of a task's name lets you open, start or finish it.
-- **MCP server:** `task-tumbler --mcp` speaks the Model Context Protocol on stdio and drives the running app over D-Bus, so agents' changes are live and undoable.
+- **MCP server:** `task-tumbler --mcp` speaks the Model Context Protocol on stdio and drives the running app over its local socket (starting it in the tray if needed), so agents' changes are live and undoable. `--mcp --db path` reaches a test instance started with the same `--db`.
   - Tools: get_today, list_tasks, get_task, get_current, add_task, complete_task, start_work, stop_work, schedule_task, and for notes search_notes, get_note, add_note, append_to_note (D-Bus: `Notes`, `Note`, `AddNote`, `AppendToNote`), get_stats (D-Bus: `Stats`), and for winding down get_close_out, resolve_leftover, clear_leftovers, add_to_day_note, close_day, let_go, get_week_review and finish_week_review (D-Bus: `CloseOut`, `ResolveLeftover`, `ClearLeftovers`, `AddToDayNote`, `FinishCloseOut`, `LetGo`, `WeekReview`, `FinishReview`). An agent can only add to the day note, never replace it.
   - For Claude Code: `claude mcp add task-tumbler -- task-tumbler --mcp`.
   - Settings → "Let other apps change tasks" makes D-Bus, KRunner and MCP read-only.
@@ -84,7 +84,7 @@ Phase 1:
 
 ## Build and run
 
-Requires Qt ≥ 6.8 (with Network and DBus), KDE Frameworks ≥ 6.8 (Kirigami, KirigamiAddons, I18n, CoreAddons, DBusAddons, Notifications, StatusNotifierItem, GlobalAccel, KIO, Service, IdleTime), QtKeychain, OpenSSL 3, KCalendarCore, KDE Prison (QR codes, runtime), CMake ≥ 3.20 and a C++20 compiler. `-DBUILD_APP=OFF` builds only the core, the CLI and the core tests.
+Requires Qt ≥ 6.8 (with Network and DBus), KDE Frameworks ≥ 6.8 (Kirigami, KirigamiAddons, I18n, CoreAddons, Notifications, StatusNotifierItem, GlobalAccel, KIO, Service, IdleTime), QtKeychain, OpenSSL 3, KCalendarCore, KDE Prison (QR codes, runtime), CMake ≥ 3.20 and a C++20 compiler. `-DBUILD_APP=OFF` builds only the core, the CLI and the core tests.
 
 ```bash
 cmake -S . -B build -G Ninja

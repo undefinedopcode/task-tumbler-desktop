@@ -110,7 +110,7 @@ private slots:
         QVERIFY(!tools.at(4).toObject().value("annotations").toObject().value("readOnlyHint").toBool());
     }
 
-    void toolCallsMapToTheDBusApi()
+    void toolCallsMapToTheApi()
     {
         FakeBackend backend;
         backend.answers = {{"Capture", "task-123"}, {"Tasks", "[{\"id\":\"a\"}]"}, {"Complete", true}, {"StartWork", false}};
@@ -130,7 +130,7 @@ private slots:
         QVERIFY(isToolError(*reply)); // backend said false
     }
 
-    void noteToolsMapToTheDBusApi()
+    void noteToolsMapToTheApi()
     {
         FakeBackend backend;
         backend.answers = {{"Notes", "[]"}, {"AddNote", "note-1"}, {"AppendToNote", true}, {"Note", "{\"id\":\"note-1\"}"}};
@@ -158,7 +158,7 @@ private slots:
         QCOMPARE(backend.calls.size(), before);
     }
 
-    void statsToolMapsToTheDBusApi()
+    void statsToolMapsToTheApi()
     {
         FakeBackend backend;
         backend.answers = {{"Stats", "{}"}};
@@ -171,7 +171,7 @@ private slots:
         QCOMPARE(backend.calls.last().second, QVariantList({0}));
     }
 
-    void closeOutToolsMapToTheDBusApi()
+    void closeOutToolsMapToTheApi()
     {
         FakeBackend backend;
         backend.answers = {{"CloseOut", "{\"leftovers\":[]}"}, {"ResolveLeftover", true}, {"AddToDayNote", "note-9"},

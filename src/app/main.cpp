@@ -2,26 +2,27 @@
 #include "database.h"
 #include "desktop/autostart.h"
 #include "desktop/reminders.h"
-#include "desktop/dbusapi.h"
+#include "desktop/externalapi.h"
 #include "desktop/focusguard.h"
 #include "desktop/idlewatch.h"
 #include "desktop/krunner.h"
 #include "desktop/launcher.h"
 #include "desktop/tray.h"
-#include "dbusbackend.h"
+#include "ipc.h"
 #include "mcpserver.h"
+#include "socketbackend.h"
 #include "keystore.h"
 #include "remote/remotehub.h"
 #include "sync/synchub.h"
 
 #include <KAboutData>
-#include <KDBusService>
 #include <KGlobalAccel>
 #include <KLocalizedQmlContext>
 #include <KLocalizedString>
 #include <QAction>
 #include <QApplication>
 #include <QCommandLineParser>
+#include <QDBusConnection>
 #include <QDir>
 #include <QFile>
 #include <QIcon>
@@ -35,12 +36,21 @@
 using namespace tumbler;
 
 namespace {
-// `task-tumbler --mcp`: a Model Context Protocol server on stdin/stdout for
-// agents like Claude Code. No GUI; it drives the running app over D-Bus.
+// `task-tumbler --mcp [--db path]`: a Model Context Protocol server on
+// stdin/stdout for agents like Claude Code. No GUI; it drives the running app
+// over its local socket.
 int runMcp(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
-    tumbler::mcp::DBusBackend backend;
+    QString db;
+    const QStringList args = QCoreApplication::arguments();
+    for (qsizetype i = 1; i < args.size(); ++i) {
+        if (args[i] == QLatin1String("--db") && i + 1 < args.size())
+            db = args[i + 1];
+        else if (args[i].startsWith(QLatin1String("--db=")))
+            db = args[i].mid(5);
+    }
+    tumbler::mcp::SocketBackend backend(db);
     tumbler::mcp::Server server(&backend);
     return tumbler::mcp::runStdio(server);
 }
@@ -93,12 +103,30 @@ int main(int argc, char *argv[])
     // bus names.
     const QString shot = qEnvironmentVariable("TUMBLER_SCREENSHOT");
     const bool sandboxed = !shot.isEmpty();
+    const QString dbArg = parser.isSet(dbOption) ? parser.value(dbOption) : QString();
 
-    // One instance per user. A second launch hands its arguments over and
-    // exits; a --db test instance runs alongside instead.
-    std::unique_ptr<KDBusService> service;
-    if (!sandboxed)
-        service = std::make_unique<KDBusService>(parser.isSet(dbOption) ? KDBusService::Multiple : KDBusService::Unique);
+    // One instance per database. A second launch hands its arguments to the
+    // running one and exits. A --db instance has a socket of its own, so it
+    // runs alongside the real one and `--mcp --db` can reach it; that's also
+    // the only way a screenshot run listens at all.
+    const QString socketPath = ipc::socketPath(dbArg);
+    const bool listens = !sandboxed || !dbArg.isEmpty();
+    if (listens) {
+        ipc::Client running(socketPath);
+        if (running.connect(500)) {
+            // The launcher's activation token lets the running window come to the front on Wayland.
+            QVariantList args;
+            for (const QString &a : QCoreApplication::arguments())
+                args.append(a);
+            if (const QString token = qEnvironmentVariable("XDG_ACTIVATION_TOKEN"); !token.isEmpty())
+                args.append(QStringLiteral("--activation-token=") + token);
+            QString handoff;
+            running.call(QStringLiteral("Activate"), args, &handoff, 5000);
+            if (!handoff.isEmpty())
+                qCritical("Task Tumbler is already running but didn't answer: %s", qPrintable(handoff));
+            return handoff.isEmpty() ? 0 : 1;
+        }
+    }
 
     Database db;
     QString error;
@@ -142,10 +170,17 @@ int main(int argc, char *argv[])
         focus = std::make_unique<FocusGuard>(&controller);
     }
     Launcher launcher(&controller);
-    DBusApi api(&controller);
+    ExternalApi api(&controller);
+    ipc::Server socket(&api, [&api] { return api.takeError(); });
+    if (listens) {
+        QString socketError;
+        if (!socket.listen(socketPath, &socketError))
+            qWarning("Not listening for other apps: %s", qPrintable(socketError));
+    }
     KRunnerApi runner(&controller);
-    if (!parser.isSet(dbOption) && !sandboxed) {
+    if (dbArg.isEmpty() && !sandboxed) {
         // The test instance (--db) stays off the bus so it can't be mistaken for the real one.
+        QDBusConnection::sessionBus().registerService(QStringLiteral("org.kde.tasktumbler"));
         api.registerOnBus();
         runner.registerOnBus();
     }
@@ -157,26 +192,28 @@ int main(int argc, char *argv[])
         KGlobalAccel::self()->setGlobalShortcut(&captureAction, QKeySequence(Qt::META | Qt::SHIFT | Qt::Key_Space));
     QObject::connect(&captureAction, &QAction::triggered, &controller, &AppController::showCaptureRequested);
 
-    if (service) {
-        QObject::connect(service.get(), &KDBusService::activateRequested, &controller, [&controller](const QStringList &args, const QString &) {
-            // A second launch hands its arguments to this instance.
-            const qsizetype add = args.indexOf(QStringLiteral("--add"));
-            if (add >= 0 && add + 1 < args.size()) {
-                controller.capture(args.at(add + 1));
+    QObject::connect(&socket, &ipc::Server::activateRequested, &controller, [&controller](const QStringList &args) {
+        // A second launch hands its arguments to this instance.
+        for (const QString &a : args) {
+            if (a.startsWith(QLatin1String("--activation-token=")))
+                qputenv("XDG_ACTIVATION_TOKEN", a.mid(19).toUtf8()); // used by the next window activation
+        }
+        const qsizetype add = args.indexOf(QStringLiteral("--add"));
+        if (add >= 0 && add + 1 < args.size()) {
+            controller.capture(args.at(add + 1));
+            return;
+        }
+        for (const QString &a : args) {
+            if (a.startsWith(QLatin1String("--add="))) {
+                controller.capture(a.mid(6));
                 return;
             }
-            for (const QString &a : args) {
-                if (a.startsWith(QLatin1String("--add="))) {
-                    controller.capture(a.mid(6));
-                    return;
-                }
-            }
-            if (args.contains(QStringLiteral("--capture")))
-                Q_EMIT controller.showCaptureRequested();
-            else
-                Q_EMIT controller.showWindowRequested();
-        });
-    }
+        }
+        if (args.contains(QStringLiteral("--capture")))
+            Q_EMIT controller.showCaptureRequested();
+        else
+            Q_EMIT controller.showWindowRequested();
+    });
 
     // Keep the login item and the KRunner plugin in step with their settings.
     const auto syncDesktopFiles = [&controller] {
