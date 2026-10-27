@@ -108,3 +108,92 @@ export interface Category {
 }
 
 export type Settings = Record<string, unknown>
+
+export interface Recurrence {
+  type: 'daily' | 'weekly'
+  interval: number
+  days?: number[]
+}
+
+export interface TaskAction {
+  id: string
+  kind: 'url' | 'file' | 'app' | 'command'
+  target: string
+  label: string
+  icon: string
+  onStart: boolean
+  needsApproval: boolean
+}
+
+export interface ScheduleBlock {
+  id: string
+  taskId: string
+  start: number
+  end: number
+  completed: boolean
+  bumpedCount: number
+  label: string
+}
+
+export interface TaskDetail extends Task {
+  recurrence?: Recurrence
+  subtasks: Task[]
+  prerequisites: Task[]
+  dependents: Task[]
+  parentTitle?: string
+  schedules: ScheduleBlock[]
+  loggedMinutes: number
+  actions: TaskAction[]
+  categoryName?: string
+  categoryColor?: string
+}
+
+// A row of the Tasks list (TaskListModel::rows()).
+export interface TaskRowData {
+  taskId: string
+  title: string
+  description: string
+  status: TaskStatus
+  priority: Priority
+  energy: Energy
+  estimate: number
+  dueDate: string
+  dueState: '' | 'overdue' | 'today' | 'soon'
+  tags: string[]
+  categoryName: string
+  categoryColor: string
+  isRecurring: boolean
+  recurrenceText: string
+  blocked: boolean
+  subtasksDone: number
+  subtasksTotal: number
+  parentTitle: string
+  nextBlock: number
+  loggedMinutes: number
+  taskColor: string
+}
+
+export interface NoteSummary {
+  id: string
+  title: string
+  snippet: string
+  tags: string[]
+  color: string
+  taskId: string
+  taskTitle: string
+  updatedAt: number
+}
+
+export interface ProposedStep {
+  title: string
+  minutes: number
+  energy: Energy
+  checked: boolean
+}
+
+export interface AiState {
+  provider?: 'off' | 'anthropic' | 'ollama'
+  ready?: boolean
+  busy?: boolean
+  label?: string
+}

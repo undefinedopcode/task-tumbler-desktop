@@ -206,6 +206,94 @@ export function createMock(): Objects {
     reply(cb, true)
   }
 
+  // The Tasks list and task details, from the same sample tasks.
+  const extra: ReadyTask[] = [
+    task('Water the plants', { isRecurring: true, recurrenceText: 'Every 3 days', estimate: 10, energy: 'low' }),
+    task('File the expense report', { status: 'completed', estimate: 20 }),
+  ]
+  const all = () => [...app.today.ready, ...extra]
+  const tasks: any = { filter: 'active', search: '', categoryId: '', totalActive: 0, count: 0 }
+  for (const k of ['filter', 'search', 'categoryId', 'count']) tasks[`${k}Changed`] = signal()
+  tasks.rowsChanged = signal()
+  tasks.countChanged = signal()
+  tasks.rows = (cb: any) => {
+    const done = (t: ReadyTask) => t.status === 'completed' || t.status === 'cancelled'
+    const rows = all()
+      .filter((t) => (tasks.filter === 'active' ? !done(t) : tasks.filter === 'completed' ? done(t) : true))
+      .filter((t) => !tasks.search || t.title.toLowerCase().includes(String(tasks.search).toLowerCase()))
+      .map((t) => ({
+        ...t,
+        taskId: t.id,
+        dueState: '',
+        categoryName: 'Default',
+        categoryColor: '#5b5bd6',
+        recurrenceText: t.recurrenceText ?? '',
+        blocked: false,
+        parentTitle: '',
+        nextBlock: 0,
+        loggedMinutes: 0,
+        taskColor: '',
+      }))
+    reply(cb, rows)
+  }
+  // Property writes from the page land here; say the rows moved.
+  const tasksProxy = new Proxy(tasks, {
+    set(target, prop, value) {
+      target[prop] = value
+      target[`${String(prop)}Changed`]?.emit()
+      target.rowsChanged.emit()
+      return true
+    },
+  })
+  app.tasks = tasksProxy
+  app.changed.connect(() => tasks.rowsChanged.emit())
+  app.categories = [
+    { id: 'c1', name: 'Default', color: '#5b5bd6', isDefault: true, showOnSchedule: true },
+    { id: 'c2', name: 'Work', color: '#12a594', isDefault: false, showOnSchedule: true },
+  ]
+  const details = new Map<string, any>()
+  app.taskDetail = (id: string, cb: any) => {
+    const t = all().find((x) => x.id === id)
+    if (!t) return reply(cb, {})
+    const d = details.get(id) ?? { subtasks: [], prerequisites: [], dependents: [], schedules: [], actions: [], loggedMinutes: 25 }
+    details.set(id, d)
+    reply(cb, { ...t, ...d })
+  }
+  app.updateTask = (id: string, fields: any, cb: any) => {
+    const t = all().find((x) => x.id === id)
+    if (t) {
+      const map: Record<string, string> = { energy_required: 'energy', time_estimate_minutes: 'estimate', due_date: 'dueDate', category_id: 'categoryId' }
+      for (const [k, v] of Object.entries(fields)) (t as any)[map[k] ?? k] = v
+      if ('recurrence' in fields) {
+        t.isRecurring = !!fields.recurrence
+        ;(details.get(id) ?? {}).recurrence = fields.recurrence ?? undefined
+        details.set(id, { ...(details.get(id) ?? {}), recurrence: fields.recurrence ?? undefined })
+        t.recurrenceText = fields.recurrence ? 'Every day' : undefined
+      }
+      app.todayChanged.emit()
+      app.changed.emit(['tasks'])
+    }
+    reply(cb, true)
+  }
+  app.addSubtask = (parentId: string, title: string, cb: any) => {
+    const d = details.get(parentId)
+    d?.subtasks.push(task(title, { parentId }))
+    app.changed.emit(['tasks'])
+    reply(cb, id())
+  }
+  app.prerequisiteCandidates = (taskId: string, cb: any) => reply(cb, all().filter((t) => t.id !== taskId))
+  app.notes = (_s: string, _t: string, _task: string, cb: any) => reply(cb, [])
+  app.installedApps = (cb: any) => reply(cb, [{ id: 'firefox', name: 'Firefox', icon: 'firefox' }])
+  app.addAction = (_t: string, _k: string, _x: string, _o: boolean, cb: any) => reply(cb, id())
+  app.deleteTask = (taskId: string, cb: any) => {
+    update({ ready: app.today.ready.filter((r: ReadyTask) => r.id !== taskId) }, 'delete task')
+    reply(cb, true)
+  }
+  app.openTaskRequested = signal()
+  app.stepsReady = signal()
+  app.aiFailed = signal()
+  app.commandNeedsApproval = signal()
+
   const shell: any = {
     platform: 'linux',
     colorScheme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',

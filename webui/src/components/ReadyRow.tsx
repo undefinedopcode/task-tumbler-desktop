@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { call } from '../bridge/hooks'
 import type { Energy, ReadyTask } from '../bridge/types'
 import { dueLabel, duration } from '../lib/format'
+import { useNav } from '../lib/nav'
 import { Button, Chip, IconButton } from './ui'
 
 export const energyLabel: Record<Energy, string> = { low: 'Low', medium: 'Medium', high: 'High', peak: 'Peak' }
@@ -11,6 +12,7 @@ export const energyLabel: Record<Energy, string> = { low: 'Low', medium: 'Medium
 // A task that can be started now: tick it off, start it, or give it a slot.
 export function ReadyRow({ task }: { task: ReadyTask }) {
   const [leaving, setLeaving] = useState(false)
+  const nav = useNav()
   const due = dueLabel(task.dueDate)
   const finish = () => {
     setLeaving(true)
@@ -31,7 +33,9 @@ export function ReadyRow({ task }: { task: ReadyTask }) {
         <Check className="size-3" strokeWidth={3} />
       </button>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[14px] text-fg">{task.title}</div>
+        <button onClick={() => nav.openTask(task.id)} className="block max-w-full truncate text-left text-[14px] text-fg hover:underline hover:decoration-line-strong hover:underline-offset-2">
+          {task.title}
+        </button>
         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
           {(task.priority === 'urgent' || task.priority === 'high') && (
             <Chip tone="danger" icon={<Flag className="size-3" />}>

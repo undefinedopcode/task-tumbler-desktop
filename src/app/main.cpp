@@ -113,8 +113,11 @@ int main(int argc, char *argv[])
 
 #ifdef TUMBLER_DEV_DATA_DIR
     // Running from the build tree: let KNotification find our notifyrc.
-    if (QDir(QStringLiteral(TUMBLER_DEV_DATA_DIR)).exists())
-        qputenv("XDG_DATA_DIRS", QByteArray(TUMBLER_DEV_DATA_DIR ":") + qgetenv("XDG_DATA_DIRS"));
+    if (QDir(QStringLiteral(TUMBLER_DEV_DATA_DIR)).exists()) {
+        // Unset means the XDG default, which must stay on the list.
+        const QByteArray dirs = qEnvironmentVariableIsEmpty("XDG_DATA_DIRS") ? QByteArray("/usr/local/share:/usr/share") : qgetenv("XDG_DATA_DIRS");
+        qputenv("XDG_DATA_DIRS", QByteArray(TUMBLER_DEV_DATA_DIR ":") + dirs);
+    }
 #endif
 
 #ifdef Q_OS_MACOS
@@ -134,6 +137,18 @@ int main(int argc, char *argv[])
 #ifdef Q_OS_MACOS
     installNotifyConfig();
     keepMacPalette(app);
+#endif
+
+#ifndef Q_OS_MACOS
+    // Desktops without a platform theme (and offscreen runs) name no icon
+    // theme or places to look, and then no app icon is found at all.
+    if (QIcon::themeName().isEmpty()) {
+        QIcon::setThemeSearchPaths(QIcon::themeSearchPaths()
+                                   + QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("icons"),
+                                                               QStandardPaths::LocateDirectory));
+        QIcon::setThemeName(QStringLiteral("hicolor"));
+        QIcon::setFallbackThemeName(QStringLiteral("breeze"));
+    }
 #endif
 
     KAboutData about(QStringLiteral("tasktumbler"), i18n("Task Tumbler"), QStringLiteral("0.1.0"),

@@ -26,7 +26,7 @@ QList<App> scan()
             QString name = info.value(QStringLiteral("CFBundleDisplayName")).toString();
             if (name.isEmpty())
                 name = bundle.completeBaseName();
-            out.append({id, name, QStringLiteral("application-x-executable")});
+            out.append({id, name, bundle.filePath()}); // the web UI asks the system for its icon
         }
     }
     return out;

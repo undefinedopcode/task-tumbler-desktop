@@ -135,3 +135,39 @@ export function Kbd({ children }: { children: ReactNode }) {
     </kbd>
   )
 }
+
+export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={clsx(
+        'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors',
+        checked ? 'bg-accent' : 'bg-line-strong',
+      )}
+    >
+      <span className={clsx('inline-block size-4 rounded-full bg-white shadow transition-transform', checked ? 'translate-x-[18px]' : 'translate-x-0.5')} />
+    </button>
+  )
+}
+
+export function Checkbox({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
+  return (
+    <button
+      role="checkbox"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={clsx(
+        'flex size-[18px] shrink-0 items-center justify-center rounded-[5px] border-[1.5px] transition-colors',
+        checked ? 'border-accent bg-accent text-accent-fg' : 'border-line-strong text-transparent hover:border-accent',
+      )}
+    >
+      <svg viewBox="0 0 12 12" className="size-3" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2.5 6.5l2.2 2.2 4.8-5" />
+      </svg>
+    </button>
+  )
+}

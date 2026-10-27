@@ -16,7 +16,7 @@ namespace tumbler::apps {
 struct App {
     QString id;
     QString name;
-    QString icon; // an icon theme name
+    QString icon; // an icon theme name (Linux) or the app bundle's path (macOS)
 };
 
 QList<App> installed();

@@ -54,7 +54,6 @@ export const pageTitles: Record<Page, string> = {
 
 export function Sidebar({ page, onPage }: { page: Page; onPage: (p: Page) => void }) {
   const today = useProp<Today | null>('app', 'today', null)
-  const readyCount = today?.readyTotal ?? 0
   const item = (p: Page, label: string, Icon: LucideIcon, badge?: number | string, dot?: boolean) => (
     <button
       key={p}
@@ -79,7 +78,7 @@ export function Sidebar({ page, onPage }: { page: Page; onPage: (p: Page) => voi
         <span className="text-[15px] font-semibold tracking-tight">Task Tumbler</span>
       </div>
       <div className="flex flex-col gap-0.5">
-        {main.map((m) => item(m.page, m.label, m.icon, m.page === 'tasks' ? readyCount : undefined))}
+        {main.map((m) => item(m.page, m.label, m.icon))}
       </div>
       <div className="mt-5 mb-1.5 px-2.5 text-[11.5px] font-semibold tracking-wide text-subtle uppercase">Insight</div>
       <div className="flex flex-col gap-0.5">{insight.map((m) => item(m.page, m.label, m.icon))}</div>

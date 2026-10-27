@@ -24,7 +24,7 @@ declare global {
   interface Window {
     qt?: { webChannelTransport: unknown }
     QWebChannel?: new (transport: unknown, ready: (channel: { objects: Objects }) => void) => unknown
-    tumbler?: { showPage: (name: string) => void }
+    tumbler?: { showPage: (name: string) => void; openTask: (id: string) => void }
   }
 }
 

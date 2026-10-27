@@ -1,10 +1,14 @@
 import * as Tooltip from '@radix-ui/react-tooltip'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { call, useProp, useSignal } from './bridge/hooks'
 import { pageTitles, Sidebar, type Page } from './components/Sidebar'
+import { ApprovalDialog } from './components/ApprovalDialog'
+import { TaskDetailPanel } from './components/TaskDetailPanel'
 import { Toasts } from './components/Toasts'
+import { NavContext, type Nav } from './lib/nav'
 import { isMod, usePlatform } from './lib/platform'
 import { Placeholder } from './pages/Placeholder'
+import { TasksPage } from './pages/TasksPage'
 import { TodayPage } from './pages/TodayPage'
 
 function initialPage(): Page {
@@ -17,6 +21,7 @@ export function App() {
   const platform = usePlatform()
   const scheme = useProp('shell', 'colorScheme', 'light')
   const captureRef = useRef<HTMLInputElement>(null)
+  const [openTask, setOpenTask] = useState<string | null>(null)
 
   const showPage = useCallback((p: string) => {
     if (p in pageTitles) {
@@ -32,9 +37,20 @@ export function App() {
 
   // The host's way in: notifications, the tray and screenshot runs.
   useEffect(() => {
-    window.tumbler = { showPage }
+    window.tumbler = { showPage, openTask: setOpenTask }
   }, [showPage])
   useSignal('app', 'pageRequested', showPage)
+  useSignal('app', 'openTaskRequested', setOpenTask)
+  const closeTask = useCallback(() => setOpenTask(null), [])
+  const nav = useMemo<Nav>(
+    () => ({
+      openTask: setOpenTask,
+      // Notes aren't in the web UI yet: the page, for now.
+      openNote: () => showPage('notes'),
+      showPage,
+    }),
+    [showPage],
+  )
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -56,14 +72,24 @@ export function App() {
   }, [platform, showPage])
 
   return (
-    <Tooltip.Provider>
-      <div className="flex h-full">
-        <Sidebar page={page} onPage={showPage} />
-        <main className="min-w-0 flex-1 overflow-y-auto">
-          {page === 'today' ? <TodayPage ref={captureRef} onPage={showPage} /> : <Placeholder title={pageTitles[page]} />}
-        </main>
-      </div>
-      <Toasts />
-    </Tooltip.Provider>
+    <NavContext.Provider value={nav}>
+      <Tooltip.Provider>
+        <div className="flex h-full">
+          <Sidebar page={page} onPage={showPage} />
+          <main className="min-w-0 flex-1 overflow-y-auto">
+            {page === 'today' ? (
+              <TodayPage ref={captureRef} onPage={showPage} />
+            ) : page === 'tasks' ? (
+              <TasksPage selectedTask={openTask} />
+            ) : (
+              <Placeholder title={pageTitles[page]} />
+            )}
+          </main>
+          {openTask && <TaskDetailPanel key={openTask} taskId={openTask} onClose={closeTask} />}
+        </div>
+        <Toasts />
+        <ApprovalDialog />
+      </Tooltip.Provider>
+    </NavContext.Provider>
   )
 }

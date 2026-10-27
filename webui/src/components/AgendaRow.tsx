@@ -4,10 +4,12 @@ import { call } from '../bridge/hooks'
 import type { AgendaItem } from '../bridge/types'
 import { duration, time } from '../lib/format'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './Menu'
+import { useNav } from '../lib/nav'
 import { Chip, IconButton } from './ui'
 
 // One thing on today's timeline: a scheduled block, a routine or an event.
 export function AgendaRow({ item }: { item: AgendaItem }) {
+  const nav = useNav()
   const done = item.state === 'done' || item.state === 'skipped'
   const isEvent = item.kind === 'event'
   const minutes = Math.round((item.end - item.start) / 60_000)
@@ -32,7 +34,16 @@ export function AgendaRow({ item }: { item: AgendaItem }) {
       </div>
       <div className="w-[3px] shrink-0 rounded-full" style={{ background: item.color || (isEvent ? 'var(--tt-subtle)' : 'var(--tt-accent)') }} />
       <div className="min-w-0 flex-1 py-px">
-        <div className={clsx('truncate text-[14px]', done ? 'text-subtle line-through' : 'text-fg')}>{item.title}</div>
+        {item.taskId ? (
+          <button
+            onClick={() => nav.openTask(item.taskId)}
+            className={clsx('block max-w-full truncate text-left text-[14px] hover:underline hover:decoration-line-strong hover:underline-offset-2', done ? 'text-subtle line-through' : 'text-fg')}
+          >
+            {item.title}
+          </button>
+        ) : (
+          <div className={clsx('truncate text-[14px]', done ? 'text-subtle line-through' : 'text-fg')}>{item.title}</div>
+        )}
         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
           {item.state === 'now' && <Chip tone="accent">Now</Chip>}
           {item.state === 'overdue' && <Chip tone="danger">Missed</Chip>}
