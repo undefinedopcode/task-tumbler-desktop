@@ -25,6 +25,27 @@ cp -R "$BUILD/src/app/task-tumbler.app" "$APP"
     -libpath="$(brew --prefix)/lib" \
     -verbose=1
 
+# macdeployqt misses some paths, e.g. in Homebrew's read-only dylibs: point
+# anything still aimed at Homebrew or the KDE prefix at the bundled copy.
+FRAMEWORKS="$APP/Contents/Frameworks"
+outside="^($(brew --prefix)|$KDE)/"
+find "$APP" -type f \( -perm -u+x -o -name '*.dylib' \) -print0 | while IFS= read -r -d '' bin; do
+    file "$bin" | grep -q 'Mach-O' || continue
+    chmod u+w "$bin"
+    id="$(otool -D "$bin" | tail -n +2)"
+    if [[ "$id" =~ $outside ]]; then
+        install_name_tool -id "@executable_path/../Frameworks/$(basename "$id")" "$bin" 2>/dev/null
+    fi
+    otool -L "$bin" | tail -n +2 | awk '{print $1}' | while read -r dep; do
+        [[ "$dep" =~ $outside ]] || continue
+        if [ -e "$FRAMEWORKS/$(basename "$dep")" ]; then
+            install_name_tool -change "$dep" "@executable_path/../Frameworks/$(basename "$dep")" "$bin" 2>/dev/null
+        else
+            echo "warning: $bin needs $dep, which isn't bundled" >&2
+        fi
+    done
+done
+
 # Nothing may still point outside the bundle: on another Mac those paths don't exist.
 leaks="$(find "$APP" -type f \( -perm -u+x -o -name '*.dylib' \) -print0 \
     | xargs -0 otool -L 2>/dev/null | grep -E "$(brew --prefix)|$KDE" | grep -v ':$' || true)"
