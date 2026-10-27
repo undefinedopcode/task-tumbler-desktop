@@ -11,6 +11,14 @@ QT_QPA_PLATFORM=offscreen TUMBLER_SCREENSHOT=out.png TUMBLER_PAGE=tasks ./build/
 cmake --build build --target task-tumbler_qmllint    # "unqualified" warnings (i18n, applicationWindow) are expected
 QT_FORCE_STDERR_LOGGING=1 ...                         # otherwise Qt/QML warnings go to the journal, not the terminal
 ```
+Web UI (`webui/`, React; replacing the QML UI on the `webui` branch):
+```bash
+./build/src/app/task-tumbler --ui web --db /tmp/t.db     # or TUMBLER_UI=web; QML stays the default until parity
+cd webui && npm run dev                                  # browser at :5173 with mock data (bridge/mock.ts)
+./build/src/app/task-tumbler --dev-url http://localhost:5173 --db /tmp/t.db   # hot reload against the real app
+QT_QPA_PLATFORM=offscreen TUMBLER_SCREENSHOT=out.png TUMBLER_PAGE="today|js:<code>" TUMBLER_COLOR_SCHEME=dark ... --ui web
+```
+
 AI tests use `tests/fakeserver.h` (a local HTTP server); never call the real APIs from tests.
 
 **Never let test runs touch the user's desktop session.** Only run the app in sandboxed screenshot mode (`TUMBLER_SCREENSHOT`, which skips the tray, global shortcut, notifications, keyring and bus names) with `QT_QPA_PLATFORM=offscreen` and a scratch `--db`. `dbus-run-session` doesn't isolate it: portals and the keyring daemon start in the real session, and a KWallet prompt appeared on the user's screen once. Stop test processes by exact PID, never with broad `pkill -f` patterns.
@@ -18,6 +26,7 @@ AI tests use `tests/fakeserver.h` (a local HTTP server); never call the real API
 ## Layout
 - `src/core/`: `tumbler-core`, the domain rules and storage. QtCore and QtSql only, never GUI.
 - `src/app/`: the Kirigami app. `AppController` is the only object QML talks to. Every write goes through `AppController::apply(Mutation)`, which puts it on the undo stack. `desktop/` holds the tray, reminders and autostart.
+- `webui/`: the React UI (Vite, TypeScript, Tailwind v4, Radix primitives, lucide icons). CMake runs `npm ci`/`npm run build` into one inlined `index.html`, embedded as `:/webui` and served as `tumbler://app/` (`src/app/web/appscheme.*`). `src/app/web/webshell.*` is the window (QWebEngineView) and publishes `app` (AppController), `sync`, `remote` and `shell` (`shellbridge.*`: platform, colour scheme, file dialogs) over a QWebChannel. In React, `bridge/hooks.ts` gives `useProp` (a property kept current by its NOTIFY signal; list unusual signal names in `notifyOf`), `call`, `useSignal` and `useQuery`. Models don't cross the channel: expose rows as maps (`TaskListModel::rows()` + `rowsChanged`). Design tokens live in `src/index.css`; one look on every platform, light/dark from the system.
 - `src/app/qml/`: `Main.qml`, `pages/`, `components/`. `Format.qml` is a singleton; singletons can't see `i18n()`, so it uses `qsTr`.
 - `src/ai/`: `tumbler-ai`, the providers (Claude, Ollama) and each feature's prompt, schema and answer handling (`aifeatures.*`). The AI only ranks and filters; `core/dayplanner` computes every time. Treat answers as untrusted: drop unknown ids, clamp values.
 - `src/mcp/`: the MCP server (`task-tumbler --mcp`). Protocol handling in `mcpserver.*` against a `Backend` interface; `dbusbackend.*` calls the running app. Tested with a fake backend.

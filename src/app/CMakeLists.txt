@@ -14,6 +14,9 @@ qt_add_executable(task-tumbler
     desktop/devicecalendars.h desktop/devicecalendars.cpp
     remote/remotehub.h remote/remotehub.cpp
     sync/synchub.h sync/synchub.cpp
+    web/appscheme.h web/appscheme.cpp
+    web/shellbridge.h web/shellbridge.cpp
+    web/webshell.h web/webshell.cpp
 )
 
 # What differs between desktops: TUMBLER_PLATFORM_SOURCES and _LIBRARIES
@@ -60,6 +63,40 @@ qt_add_qml_module(task-tumbler
         qml/components/Format.qml
 )
 
+# The React UI (webui/): npm builds it into one self-contained index.html,
+# served from :/webui as tumbler://app/. TUMBLER_WEBUI_PREBUILT points at an
+# index.html built elsewhere, for builds without Node.
+set(TUMBLER_WEBUI_PREBUILT "" CACHE FILEPATH "A built webui index.html to use instead of running npm")
+set(WEBUI_OUT ${CMAKE_CURRENT_BINARY_DIR}/webui)
+if(TUMBLER_WEBUI_PREBUILT)
+    configure_file(${TUMBLER_WEBUI_PREBUILT} ${WEBUI_OUT}/index.html COPYONLY)
+else()
+    set(WEBUI_DIR ${PROJECT_SOURCE_DIR}/webui)
+    find_program(NPM_EXECUTABLE npm REQUIRED)
+    file(GLOB_RECURSE WEBUI_SOURCES CONFIGURE_DEPENDS ${WEBUI_DIR}/src/*)
+    # node_modules again only when the lock file changes.
+    add_custom_command(
+        OUTPUT ${WEBUI_OUT}/npm-ci.stamp
+        COMMAND ${NPM_EXECUTABLE} ci --no-audit --no-fund --loglevel=error
+        COMMAND ${CMAKE_COMMAND} -E touch ${WEBUI_OUT}/npm-ci.stamp
+        DEPENDS ${WEBUI_DIR}/package.json ${WEBUI_DIR}/package-lock.json
+        WORKING_DIRECTORY ${WEBUI_DIR}
+        COMMENT "Installing the web UI's packages"
+        VERBATIM)
+    add_custom_command(
+        OUTPUT ${WEBUI_OUT}/index.html
+        COMMAND ${NPM_EXECUTABLE} run --silent build -- --outDir ${WEBUI_OUT} --emptyOutDir false --logLevel warn
+        DEPENDS ${WEBUI_OUT}/npm-ci.stamp ${WEBUI_SOURCES} ${WEBUI_DIR}/index.html ${WEBUI_DIR}/vite.config.ts ${WEBUI_DIR}/tsconfig.json
+        WORKING_DIRECTORY ${WEBUI_DIR}
+        COMMENT "Building the web UI"
+        VERBATIM)
+endif()
+qt_add_resources(task-tumbler "webui"
+    PREFIX "/webui"
+    BASE "${WEBUI_OUT}"
+    FILES "${WEBUI_OUT}/index.html"
+)
+
 qt_add_resources(task-tumbler "icons"
     PREFIX "/icons"
     BASE "${PROJECT_SOURCE_DIR}/resources/icons"
@@ -75,7 +112,7 @@ target_link_libraries(task-tumbler PRIVATE
     tumbler-remote
     tumbler-sync
     Qt6Keychain::Qt6Keychain
-    Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::QuickControls2
+    Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineWidgets Qt6::WebChannel
     KF6::CoreAddons KF6::I18n KF6::I18nQml KF6::Notifications KF6::StatusNotifierItem
     ${TUMBLER_PLATFORM_LIBRARIES}
 )

@@ -64,7 +64,12 @@ public:
 
     void reload(const Queries &q, qint64 now);
 
+    // The filtered rows as maps keyed by role name, for the web UI (which
+    // can't read a model); `rowsChanged` says when to ask again.
+    Q_INVOKABLE QVariantList rows() const;
+
 Q_SIGNALS:
+    void rowsChanged();
     void filterChanged();
     void searchChanged();
     void categoryIdChanged();

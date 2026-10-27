@@ -259,6 +259,22 @@ void TaskListModel::rebuild()
     m_rows = rows;
     endResetModel();
     Q_EMIT countChanged();
+    Q_EMIT rowsChanged();
+}
+
+QVariantList TaskListModel::rows() const
+{
+    const QHash<int, QByteArray> names = roleNames();
+    QVariantList out;
+    out.reserve(m_rows.size());
+    for (int i = 0; i < m_rows.size(); ++i) {
+        const QModelIndex idx = index(i);
+        QVariantMap m;
+        for (auto it = names.cbegin(); it != names.cend(); ++it)
+            m.insert(QString::fromLatin1(it.value()), data(idx, it.key()));
+        out.append(m);
+    }
+    return out;
 }
 
 } // namespace tumbler

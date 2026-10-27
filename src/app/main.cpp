@@ -17,6 +17,8 @@
 #include "keystore.h"
 #include "remote/remotehub.h"
 #include "sync/synchub.h"
+#include "web/appscheme.h"
+#include "web/webshell.h"
 
 #include <KAboutData>
 #ifdef Q_OS_MACOS
@@ -42,6 +44,7 @@ Q_IMPORT_QML_PLUGIN(org_kde_tasktumbler_macstylePlugin)
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QTimer>
+#include <QWebEngineView>
 #include <memory>
 
 using namespace tumbler;
@@ -120,6 +123,12 @@ int main(int argc, char *argv[])
     KIconTheme::initTheme();
 #endif
 
+    // The web UI's scheme must be known before the engine starts.
+    AppScheme::registerScheme();
+    // No GPU offscreen (screenshot runs): Chromium draws in software.
+    if (qgetenv("QT_QPA_PLATFORM") == "offscreen" && qEnvironmentVariableIsEmpty("QTWEBENGINE_CHROMIUM_FLAGS"))
+        qputenv("QTWEBENGINE_CHROMIUM_FLAGS", "--disable-gpu");
+
     QApplication app(argc, argv);
     KLocalizedString::setApplicationDomain("tasktumbler");
 #ifdef Q_OS_MACOS
@@ -158,6 +167,11 @@ int main(int argc, char *argv[])
     parser.addOption(dbOption);
     parser.addOption(addOption);
     parser.addOption(mcpOption);
+    // While the React UI (webui/) catches up with the QML one, both are built.
+    const QCommandLineOption uiOption(QStringLiteral("ui"), i18n("Which interface: qml or web."), QStringLiteral("name"));
+    const QCommandLineOption devUrlOption(QStringLiteral("dev-url"), i18n("Load the web interface from this dev server."), QStringLiteral("url"));
+    parser.addOption(uiOption);
+    parser.addOption(devUrlOption);
     parser.process(app);
     about.processCommandLine(&parser);
 
@@ -215,12 +229,26 @@ int main(int argc, char *argv[])
     syncHub.setAutomatic(!sandboxed);
     controller.dailyBackup();
 
+    const QString ui = parser.isSet(uiOption) ? parser.value(uiOption) : qEnvironmentVariable("TUMBLER_UI", QStringLiteral("qml"));
+    const bool webUi = ui == QLatin1String("web") || parser.isSet(devUrlOption);
+
     QQmlApplicationEngine engine;
-    KLocalization::setupLocalizedContext(&engine);
-    engine.loadFromModule("org.kde.tasktumbler", "Main");
-    if (engine.rootObjects().isEmpty())
-        return 1;
-    auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
+    std::unique_ptr<WebShell> shell;
+    QWindow *window = nullptr;
+    if (webUi) {
+        WebShell::Options options;
+        options.devUrl = parser.isSet(devUrlOption) ? QUrl::fromUserInput(parser.value(devUrlOption)) : QUrl();
+        options.sandboxed = sandboxed;
+        shell = std::make_unique<WebShell>(&controller, &syncHub, &hub, options);
+        shell->winId(); // makes the QWindow the tray hangs on to
+        window = shell->windowHandle();
+    } else {
+        KLocalization::setupLocalizedContext(&engine);
+        engine.loadFromModule("org.kde.tasktumbler", "Main");
+        if (engine.rootObjects().isEmpty())
+            return 1;
+        window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
+    }
 
     std::unique_ptr<Tray> tray;
     std::unique_ptr<Reminders> reminders;
@@ -300,7 +328,10 @@ int main(int argc, char *argv[])
     if (parser.isSet(addOption)) {
         controller.capture(parser.value(addOption));
     } else if (!parser.isSet(hiddenOption)) {
-        window->show();
+        if (shell)
+            shell->show();
+        else
+            window->show();
     }
     if (parser.isSet(captureOption))
         Q_EMIT controller.showCaptureRequested();
@@ -308,26 +339,56 @@ int main(int argc, char *argv[])
     // Development aid: TUMBLER_SCREENSHOT=out.png [TUMBLER_PAGE=tasks] [TUMBLER_SHOT_SIZE=WxH]
     // renders a page, saves it and quits. Use with QT_QPA_PLATFORM=offscreen.
     // "today|plan" runs steps 700 ms apart, like clicking through.
-    if (sandboxed) {
+    if (sandboxed && shell) {
+        // The web UI: steps once the page has loaded, then a grab of the window.
+        // Steps are split on "|" as for QML.
+        const QStringList steps = qEnvironmentVariable("TUMBLER_PAGE", QStringLiteral("today")).split(QLatin1Char('|'));
+        const QStringList size = qEnvironmentVariable("TUMBLER_SHOT_SIZE").split(QLatin1Char('x'));
+        if (size.size() == 2 && size[0].toInt() > 0 && size[1].toInt() > 0)
+            shell->resize(size[0].toInt(), size[1].toInt());
+        shell->show();
+        const int delay = qEnvironmentVariableIntValue("TUMBLER_SHOT_DELAY") > 0 ? qEnvironmentVariableIntValue("TUMBLER_SHOT_DELAY") : 1500;
+        QObject::connect(shell.get(), &WebShell::loaded, shell.get(), [&shell, steps, delay, shot](bool ok) {
+            if (!ok)
+                qWarning("The web UI didn't load");
+            for (qsizetype i = 0; i < steps.size(); ++i)
+                QTimer::singleShot(300 + int(i) * 700, shell.get(), [&shell, step = steps.at(i)] {
+                    // "js:<code>" runs in the page (clicks, calls); anything else is a page name.
+                    if (step.startsWith(QLatin1String("js:")))
+                        shell->view()->page()->runJavaScript(step.mid(3));
+                    else
+                        shell->showPage(step);
+                });
+            QTimer::singleShot(delay + int(steps.size() - 1) * 700, shell.get(), [&shell, shot] {
+                shell->grab().save(shot);
+                QCoreApplication::quit();
+            });
+        });
+        QTimer::singleShot(30000, &app, [] {
+            qCritical("Screenshot timed out");
+            QCoreApplication::exit(1);
+        });
+    } else if (sandboxed) {
+        auto *quickWindow = qobject_cast<QQuickWindow *>(window);
         const QStringList steps = qEnvironmentVariable("TUMBLER_PAGE", QStringLiteral("today")).split(QLatin1Char('|'));
         // TUMBLER_SHOT_SIZE=1100x2400 for a taller look at long pages.
         const QStringList size = qEnvironmentVariable("TUMBLER_SHOT_SIZE").split(QLatin1Char('x'));
         if (size.size() == 2 && size[0].toInt() > 0 && size[1].toInt() > 0)
-            window->resize(size[0].toInt(), size[1].toInt());
-        window->show();
+            quickWindow->resize(size[0].toInt(), size[1].toInt());
+        quickWindow->show();
         for (qsizetype i = 0; i < steps.size(); ++i) {
-            QTimer::singleShot(300 + int(i) * 700, window, [window, step = steps.at(i)] {
+            QTimer::singleShot(300 + int(i) * 700, quickWindow, [quickWindow, step = steps.at(i)] {
                 if (step == QLatin1String("plan"))
-                    QMetaObject::invokeMethod(window, "openPlan");
+                    QMetaObject::invokeMethod(quickWindow, "openPlan");
                 else
-                    QMetaObject::invokeMethod(window, "showPage", Q_ARG(QVariant, step));
+                    QMetaObject::invokeMethod(quickWindow, "showPage", Q_ARG(QVariant, step));
             });
         }
         // TUMBLER_SHOT_DELAY keeps a sandboxed instance up longer (e.g. to
         // point a headless browser at its phone server).
         const int delay = qEnvironmentVariableIntValue("TUMBLER_SHOT_DELAY") > 0 ? qEnvironmentVariableIntValue("TUMBLER_SHOT_DELAY") : 1500;
-        QTimer::singleShot(delay + int(steps.size() - 1) * 700, window, [window, shot] {
-            window->grabWindow().save(shot);
+        QTimer::singleShot(delay + int(steps.size() - 1) * 700, quickWindow, [quickWindow, shot] {
+            quickWindow->grabWindow().save(shot);
             // TUMBLER_PROBE=x,y lists the visible items covering that point.
             const QStringList probe = qEnvironmentVariable("TUMBLER_PROBE").split(QLatin1Char(','));
             if (probe.size() == 2) {
@@ -341,12 +402,12 @@ int main(int argc, char *argv[])
                     for (QQuickItem *c : item->childItems())
                         walk(c, depth + 1);
                 };
-                walk(window->contentItem(), 0);
+                walk(quickWindow->contentItem(), 0);
             }
             // Other open windows (quick capture) go next to it.
             for (QWindow *w : QGuiApplication::topLevelWindows()) {
                 auto *qw = qobject_cast<QQuickWindow *>(w);
-                if (qw && qw != window && qw->isVisible()) {
+                if (qw && qw != quickWindow && qw->isVisible()) {
                     QString name = shot;
                     name.insert(name.lastIndexOf(QLatin1Char('.')), QLatin1Char('-') + qw->title().toLower().replace(QLatin1Char(' '), QLatin1Char('-')));
                     qw->grabWindow().save(name);

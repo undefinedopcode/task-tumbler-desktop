@@ -32,7 +32,7 @@ if(BUILD_APP)
     list(APPEND CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
     include(KDEInstallDirs)
 
-    find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Gui Widgets Qml Quick QuickControls2)
+    find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Gui Widgets Qml Quick QuickControls2 WebEngineWidgets WebChannel)
     find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS Kirigami CoreAddons I18n Notifications StatusNotifierItem)
     find_package(KF6KirigamiAddons 1.0 REQUIRED)
     find_package(Qt6Keychain REQUIRED)
