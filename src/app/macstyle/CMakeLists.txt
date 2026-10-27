@@ -6,6 +6,6 @@ qt_add_qml_module(tumbler-macstyle
     VERSION 1.0
     STATIC
     QML_FILES ToolButton.qml
-    IMPORTS QtQuick.Controls.macOS/auto
+    IMPORTS QtQuick.Controls.macOS
 )
 target_link_libraries(tumbler-macstyle PRIVATE Qt6::Quick Qt6::QuickControls2)
