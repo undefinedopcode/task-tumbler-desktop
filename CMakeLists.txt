@@ -32,9 +32,8 @@ if(BUILD_APP)
     list(APPEND CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
     include(KDEInstallDirs)
 
-    find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Gui Widgets Qml Quick QuickControls2 WebEngineWidgets WebChannel)
-    find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS Kirigami CoreAddons I18n Notifications StatusNotifierItem)
-    find_package(KF6KirigamiAddons 1.0 REQUIRED)
+    find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Gui Widgets WebEngineWidgets WebChannel)
+    find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS CoreAddons I18n Notifications StatusNotifierItem)
     find_package(Qt6Keychain REQUIRED)
 
     # The few things each desktop does its own way (src/app/desktop/*_linux.cpp
@@ -48,9 +47,7 @@ if(BUILD_APP)
         set(TUMBLER_PLATFORM_SOURCES ${TUMBLER_CONTROLLER_PLATFORM_SOURCES}
             ${APP_DESKTOP}/presence_mac.cpp ${APP_DESKTOP}/hotkey_mac.cpp
             ${APP_DESKTOP}/idlewatch_mac.cpp ${APP_DESKTOP}/autostart_mac.cpp)
-        # The Breeze icons, built into KIconThemes, recoloured by its icon engine.
-        find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS IconThemes)
-        set(TUMBLER_PLATFORM_LIBRARIES KF6::IconThemes "-framework Carbon" "-framework CoreGraphics" "-framework CoreFoundation"
+        set(TUMBLER_PLATFORM_LIBRARIES "-framework Carbon" "-framework CoreGraphics" "-framework CoreFoundation"
             "-framework EventKit" "-framework AppKit")
         set(TUMBLER_PLATFORM_DEFINITIONS "")
     else()

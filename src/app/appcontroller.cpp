@@ -100,12 +100,6 @@ AppController::AppController(Database &db, QObject *parent, KeyStore *keys)
 
 AppController::~AppController() = default; // out of line: ai::Provider is incomplete in the header
 
-AppController *AppController::create(QQmlEngine *, QJSEngine *)
-{
-    QJSEngine::setObjectOwnership(s_instance, QJSEngine::CppOwnership);
-    return s_instance;
-}
-
 void AppController::setInstance(AppController *instance)
 {
     s_instance = instance;

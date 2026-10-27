@@ -5,6 +5,7 @@
 #include <KLocalizedString>
 #include <KNotification>
 #include <QDateTime>
+#include <QPointer>
 #include <algorithm>
 
 namespace tumbler {

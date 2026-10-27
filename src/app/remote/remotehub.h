@@ -5,7 +5,6 @@
 
 #include <QNetworkAccessManager>
 #include <QObject>
-#include <QQmlEngine>
 #include <QTimer>
 #include <QVariantMap>
 #include <memory>
@@ -24,8 +23,6 @@ class AppController;
 class RemoteHub : public QObject, public remote::Backend
 {
     Q_OBJECT
-    QML_ELEMENT
-    QML_SINGLETON
 
     // {enabled, running, error, listen, publicUrl, pairUrl, phones: [{endpoint, label, addedAt}],
     //  streams, serveCommand, notify, tailscaleName}
@@ -35,7 +32,6 @@ public:
     RemoteHub(AppController *app, const QString &secretsPath, QObject *parent = nullptr);
     ~RemoteHub() override;
 
-    static RemoteHub *create(QQmlEngine *, QJSEngine *);
     static void setInstance(RemoteHub *hub);
     static QString defaultSecretsPath();
 

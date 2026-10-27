@@ -1,6 +1,6 @@
 # Task Tumbler Desktop
 
-A local, single-user desktop rebuild of [Task Tumbler](../task-tumbler): energy-aware task management and scheduling for ADHD/ASD brains, built with Qt 6 and QML. Data lives in one SQLite file, there is no sign-in, and AI comes from an Anthropic API key, a local Ollama model, or nothing at all.
+A local, single-user desktop rebuild of [Task Tumbler](../task-tumbler): energy-aware task management and scheduling for ADHD/ASD brains, built with Qt 6 and a React interface in QtWebEngine: one polished look on every platform, with the desktop integration done natively. Data lives in one SQLite file, there is no sign-in, and AI comes from an Anthropic API key, a local Ollama model, or nothing at all.
 
 The architecture and roadmap are in `../task-tumbler/docs/desktop-model.md`.
 
@@ -64,7 +64,7 @@ Phase 2:
 
 Phase 1:
 
-**App** (`task-tumbler`, Kirigami):
+**App** (`task-tumbler`, React UI in QtWebEngine):
 - **Today:** the running work timer, what's on right now, what didn't happen yet (with one-click "next free slot" / "tomorrow"), what's coming up, all-day events, and a Ready to Work grid. Ready to Work leaves out tasks that are waiting on unfinished prerequisites.
 - **Tasks:** search, filters, and an at-a-glance status line for each task (blocked, due, next block, steps, routine). The detail page edits everything in place: steps, prerequisites, recurrence, and each block on the schedule.
 - **Schedule:** a day timeline with category-hour shading, side-by-side lanes for overlaps, a "now" line, and blocks you can drag to move.
@@ -80,11 +80,11 @@ Phase 1:
 - Snapshot-based undo for any change.
 - SQLite storage and migrations, and the web-app importer.
 
-**Tests:** 22 suites. They cover the core, plus the app controller driven the way the QML drives it.
+**Tests:** 22 suites. They cover the core, plus the app controller driven the way the UI drives it.
 
 ## Build and run
 
-Requires Qt ≥ 6.8 (with Network, and DBus on Linux), KDE Frameworks ≥ 6.8 (Kirigami, KirigamiAddons, I18n, CoreAddons, Notifications, StatusNotifierItem, and on Linux GlobalAccel, KIO, Service, IdleTime), QtKeychain, OpenSSL 3, KCalendarCore, KDE Prison (QR codes, runtime), CMake ≥ 3.20 and a C++20 compiler. `-DBUILD_APP=OFF` builds only the core, the CLI and the core tests.
+Requires Qt ≥ 6.8 (with Network, and DBus on Linux), Qt WebEngine and WebChannel, KDE Frameworks ≥ 6.8 (I18n, CoreAddons, Notifications, StatusNotifierItem, and on Linux GlobalAccel, KIO, Service, IdleTime), QtKeychain, OpenSSL 3, KCalendarCore, Node.js with npm (the build runs `npm ci` and `npm run build` in `webui/`; `-DTUMBLER_WEBUI_PREBUILT=<index.html>` skips that), CMake ≥ 3.20 and a C++20 compiler. `-DBUILD_APP=OFF` builds only the core, the CLI and the core tests.
 
 ```bash
 cmake -S . -B build -G Ninja

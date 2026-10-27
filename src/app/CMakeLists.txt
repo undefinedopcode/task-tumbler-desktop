@@ -23,46 +23,6 @@ qt_add_executable(task-tumbler
 # come from the top-level CMakeLists.txt.
 target_sources(task-tumbler PRIVATE ${TUMBLER_PLATFORM_SOURCES})
 
-# Must precede qt_add_qml_module to take effect.
-set_source_files_properties(qml/components/Format.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
-
-qt_add_qml_module(task-tumbler
-    URI org.kde.tasktumbler
-    VERSION 1.0
-    QML_FILES
-        qml/Main.qml
-        qml/QuickCaptureWindow.qml
-        qml/pages/TodayPage.qml
-        qml/pages/TasksPage.qml
-        qml/pages/TaskDetailPage.qml
-        qml/pages/SchedulePage.qml
-        qml/pages/CategoriesPage.qml
-        qml/pages/SettingsPage.qml
-        qml/pages/OnboardingPage.qml
-        qml/pages/PlanPage.qml
-        qml/pages/EnergyPage.qml
-        qml/pages/FocusPage.qml
-        qml/pages/NotesPage.qml
-        qml/pages/NoteEditorPage.qml
-        qml/pages/StatsPage.qml
-        qml/pages/CloseOutPage.qml
-        qml/pages/WeekReviewPage.qml
-        qml/components/Chip.qml
-        qml/components/BarChart.qml
-        qml/components/SectionTitle.qml
-        qml/components/AgendaRow.qml
-        qml/components/WorkingCard.qml
-        qml/components/ReadyCard.qml
-        qml/components/TaskRow.qml
-        qml/components/CategoryDialog.qml
-        qml/components/EventDialog.qml
-        qml/components/FeedDialog.qml
-        qml/components/DeviceCalendarsDialog.qml
-        qml/components/EnergyCheckIn.qml
-        qml/components/LauncherDialog.qml
-        qml/components/Format.qml
-)
-
 # The React UI (webui/): npm builds it into one self-contained index.html,
 # served from :/webui as tumbler://app/. TUMBLER_WEBUI_PREBUILT points at an
 # index.html built elsewhere, for builds without Node.
@@ -112,8 +72,8 @@ target_link_libraries(task-tumbler PRIVATE
     tumbler-remote
     tumbler-sync
     Qt6Keychain::Qt6Keychain
-    Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::WebEngineWidgets Qt6::WebChannel
-    KF6::CoreAddons KF6::I18n KF6::I18nQml KF6::Notifications KF6::StatusNotifierItem
+    Qt6::Gui Qt6::Widgets Qt6::WebEngineWidgets Qt6::WebChannel
+    KF6::CoreAddons KF6::I18n KF6::Notifications KF6::StatusNotifierItem
     ${TUMBLER_PLATFORM_LIBRARIES}
 )
 target_compile_definitions(task-tumbler PRIVATE ${TUMBLER_PLATFORM_DEFINITIONS})
@@ -125,9 +85,6 @@ configure_file(${PROJECT_SOURCE_DIR}/resources/desktop/tasktumbler.notifyrc
 target_compile_definitions(task-tumbler PRIVATE TUMBLER_DEV_DATA_DIR="${CMAKE_BINARY_DIR}/share")
 
 if(APPLE)
-    add_subdirectory(macstyle)
-    target_link_libraries(task-tumbler PRIVATE tumbler-macstyleplugin)
-
     # A proper .app: Info.plist, the icon (an .icns made from the PNGs by
     # iconutil), and the notification config, which main.cpp hands to
     # KNotifications. .github/scripts/package-macos.sh bundles the libraries.

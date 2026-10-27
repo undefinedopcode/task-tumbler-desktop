@@ -40,7 +40,7 @@ if(BUILD_APP)
         ${APP_DIR}/tasklistmodel.h ${APP_DIR}/tasklistmodel.cpp
         ${APP_DIR}/variants.h ${APP_DIR}/variants.cpp)
     target_include_directories(tst_appcontroller PRIVATE ${APP_DIR} ${APP_DIR}/remote ${APP_DIR}/sync)
-    target_link_libraries(tst_appcontroller PRIVATE tumbler-core tumbler-ai tumbler-remote tumbler-sync tumbler-ipc Qt6Keychain::Qt6Keychain Qt6::Test Qt6::Gui Qt6::Qml ${TUMBLER_PLATFORM_LIBRARIES})
+    target_link_libraries(tst_appcontroller PRIVATE tumbler-core tumbler-ai tumbler-remote tumbler-sync tumbler-ipc Qt6Keychain::Qt6Keychain Qt6::Test Qt6::Gui ${TUMBLER_PLATFORM_LIBRARIES})
 
     target_compile_definitions(tst_appcontroller PRIVATE ${TUMBLER_PLATFORM_DEFINITIONS})
 

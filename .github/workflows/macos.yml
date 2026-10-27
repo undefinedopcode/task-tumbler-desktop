@@ -15,8 +15,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The UI (webui/) is built by CMake with npm.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: webui/package-lock.json
+
       - name: Homebrew packages
-        run: brew install qt qtkeychain openssl@3 libical gettext qrencode libdmtx zxing-cpp ninja
+        run: brew install qt qtkeychain openssl@3 libical gettext ninja
 
       - name: Cache key
         id: key
@@ -61,7 +68,6 @@ jobs:
       - name: Screenshots
         env:
           QT_QPA_PLATFORM: cocoa
-          QT_LOGGING_RULES: kf.kirigami.platform.debug=true
         run: |
           mkdir -p shots
           APP="dist/Task Tumbler.app/Contents/MacOS/task-tumbler"
@@ -82,12 +88,10 @@ jobs:
           shot seed2 today --add "Renew passport ~20m"
           shot seed3 today --add "Water the plants daily"
           rm -f shots/seed*
-          for page in today tasks schedule settings closeout; do shot "$page" "$page"; done
-          # And the same in dark mode.
-          osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to true' \
-            || defaults write -g AppleInterfaceStyle Dark
-          for page in today settings; do shot "$page-dark" "$page"; done
-          osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to false' || true
+          for page in today tasks schedule notes settings closeout; do shot "$page" "$page"; done
+          # Dark, and quick capture (saved as today-capture-quick-capture.png).
+          for page in today schedule; do TUMBLER_COLOR_SCHEME=dark shot "$page-dark" "$page"; done
+          shot today-capture "today|capture"
 
       - name: Upload app
         uses: actions/upload-artifact@v4

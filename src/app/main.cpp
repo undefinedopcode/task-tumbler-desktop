@@ -21,13 +21,6 @@
 #include "web/webshell.h"
 
 #include <KAboutData>
-#ifdef Q_OS_MACOS
-#include <KIconTheme>
-#include <QStyleHints>
-#include <QtQml/qqmlextensionplugin.h>
-Q_IMPORT_QML_PLUGIN(org_kde_tasktumbler_macstylePlugin)
-#endif
-#include <KLocalizedQmlContext>
 #include <KLocalizedString>
 #include <QAction>
 #include <QApplication>
@@ -38,11 +31,7 @@ Q_IMPORT_QML_PLUGIN(org_kde_tasktumbler_macstylePlugin)
 #include <QDir>
 #include <QFile>
 #include <QIcon>
-#include <QQmlApplicationEngine>
-#include <QQuickStyle>
 #include <QStandardPaths>
-#include <QQuickWindow>
-#include <QQuickItem>
 #include <QTimer>
 #include <QWebEngineView>
 #include <memory>
@@ -88,19 +77,6 @@ void installNotifyConfig()
     if (installed.open(QIODevice::WriteOnly | QIODevice::Truncate))
         installed.write(config);
 }
-
-// KIconTheme::initTheme() also starts KColorSchemeManager, which away from
-// Plasma swaps the system palette for Breeze or Breeze Dark. It stands back
-// when a platform theme has claimed the colour scheme, but clears the claim
-// whenever the system appearance changes, so claim it again just before (this
-// connection is made first, so it runs first). The Mac's own palette stays,
-// light or dark, with the user's accent colour.
-void keepMacPalette(QApplication &app)
-{
-    const auto claim = [&app] { app.setProperty("KDE_COLOR_SCHEME_PATH", QStringLiteral("macos-system")); };
-    claim();
-    QObject::connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, &app, claim);
-}
 #endif
 } // namespace
 
@@ -120,12 +96,6 @@ int main(int argc, char *argv[])
     }
 #endif
 
-#ifdef Q_OS_MACOS
-    // No icon theme on a Mac: Breeze's are built in, and KIconTheme's engine
-    // (bundled in PlugIns/kiconthemes6) recolours them to suit light or dark.
-    KIconTheme::initTheme();
-#endif
-
     // The web UI's scheme must be known before the engine starts.
     AppScheme::registerScheme();
     // No GPU offscreen (screenshot runs): Chromium draws in software.
@@ -136,7 +106,6 @@ int main(int argc, char *argv[])
     KLocalizedString::setApplicationDomain("tasktumbler");
 #ifdef Q_OS_MACOS
     installNotifyConfig();
-    keepMacPalette(app);
 #endif
 
 #ifndef Q_OS_MACOS
@@ -159,33 +128,19 @@ int main(int argc, char *argv[])
     QApplication::setWindowIcon(
         QIcon::fromTheme(QStringLiteral("org.kde.tasktumbler"), QIcon(QStringLiteral(":/icons/org.kde.tasktumbler.svg"))));
 
-    // Plasma's own look, or the Mac's: Qt's macOS style plus a proper tool
-    // button (src/app/macstyle). Kirigami also picks its colours by the
-    // style's name (styles/<name>/Theme.qml, see package-macos.sh).
-    if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
-#ifdef Q_OS_MACOS
-        QQuickStyle::setStyle(QStringLiteral("org.kde.tasktumbler.macstyle"));
-#else
-        QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
-#endif
-    }
-
     QCommandLineParser parser;
     about.setupCommandLine(&parser);
     const QCommandLineOption captureOption(QStringLiteral("capture"), i18n("Open quick capture."));
     const QCommandLineOption hiddenOption(QStringLiteral("hidden"), i18n("Start in the system tray."));
     const QCommandLineOption addOption(QStringLiteral("add"), i18n("Capture a task (quick-capture syntax) and exit."), QStringLiteral("text"));
     const QCommandLineOption mcpOption(QStringLiteral("mcp"), i18n("Serve the Model Context Protocol on stdin/stdout for AI agents."));
-    const QCommandLineOption dbOption(QStringLiteral("db"), i18n("Use this database file (for testing)."), QStringLiteral("path"));
+    const QCommandLineOption dbOption(QStringLiteral("db"), i18n("Use this database file (for testing: no login item, KRunner plugin, global shortcut or D-Bus name)."), QStringLiteral("path"));
     parser.addOption(captureOption);
     parser.addOption(hiddenOption);
     parser.addOption(dbOption);
     parser.addOption(addOption);
     parser.addOption(mcpOption);
-    // While the React UI (webui/) catches up with the QML one, both are built.
-    const QCommandLineOption uiOption(QStringLiteral("ui"), i18n("Which interface: qml or web."), QStringLiteral("name"));
     const QCommandLineOption devUrlOption(QStringLiteral("dev-url"), i18n("Load the web interface from this dev server."), QStringLiteral("url"));
-    parser.addOption(uiOption);
     parser.addOption(devUrlOption);
     parser.process(app);
     about.processCommandLine(&parser);
@@ -244,26 +199,13 @@ int main(int argc, char *argv[])
     syncHub.setAutomatic(!sandboxed);
     controller.dailyBackup();
 
-    const QString ui = parser.isSet(uiOption) ? parser.value(uiOption) : qEnvironmentVariable("TUMBLER_UI", QStringLiteral("qml"));
-    const bool webUi = ui == QLatin1String("web") || parser.isSet(devUrlOption);
-
-    QQmlApplicationEngine engine;
-    std::unique_ptr<WebShell> shell;
-    QWindow *window = nullptr;
-    if (webUi) {
-        WebShell::Options options;
-        options.devUrl = parser.isSet(devUrlOption) ? QUrl::fromUserInput(parser.value(devUrlOption)) : QUrl();
-        options.sandboxed = sandboxed;
-        shell = std::make_unique<WebShell>(&controller, &syncHub, &hub, options);
-        shell->winId(); // makes the QWindow the tray hangs on to
-        window = shell->windowHandle();
-    } else {
-        KLocalization::setupLocalizedContext(&engine);
-        engine.loadFromModule("org.kde.tasktumbler", "Main");
-        if (engine.rootObjects().isEmpty())
-            return 1;
-        window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
-    }
+    // The window: the React UI (webui/) in a web view.
+    WebShell::Options options;
+    options.devUrl = parser.isSet(devUrlOption) ? QUrl::fromUserInput(parser.value(devUrlOption)) : QUrl();
+    options.sandboxed = sandboxed;
+    auto shell = std::make_unique<WebShell>(&controller, &syncHub, &hub, options);
+    shell->winId(); // makes the QWindow the tray hangs on to
+    QWindow *window = shell->windowHandle();
 
     std::unique_ptr<Tray> tray;
     std::unique_ptr<Reminders> reminders;
@@ -287,7 +229,7 @@ int main(int argc, char *argv[])
     if (!sandboxed)
         focus = std::make_unique<FocusGuard>(&controller);
     KRunnerApi runner(&controller);
-    if (dbArg.isEmpty() && !sandboxed) {
+    if (!sandboxed && dbArg.isEmpty()) {
         // The test instance (--db) stays off the bus so it can't be mistaken for the real one.
         QDBusConnection::sessionBus().registerService(QStringLiteral("org.kde.tasktumbler"));
         api.registerOnBus();
@@ -295,10 +237,15 @@ int main(int argc, char *argv[])
     }
 #endif
 
+    // The session-wide things (the global shortcut, the login item and the
+    // KRunner plugin) belong to the real instance only: a --db instance is for
+    // testing, and its settings mustn't rewrite the user's desktop.
+    const bool ownsSession = dbArg.isEmpty() && !sandboxed;
+
     // Global quick-capture hotkey.
     QAction captureAction(i18n("Quick Capture"));
     captureAction.setObjectName(QStringLiteral("quick_capture"));
-    if (!sandboxed)
+    if (ownsSession)
         registerGlobalShortcut(&captureAction);
     QObject::connect(&captureAction, &QAction::triggered, &controller, &AppController::showCaptureRequested);
 
@@ -334,7 +281,7 @@ int main(int argc, char *argv[])
         KRunnerApi::setPluginInstalled(controller.settings().value(QStringLiteral("krunner")).toBool());
 #endif
     };
-    if (!sandboxed) {
+    if (ownsSession) {
         QObject::connect(&controller, &AppController::settingsChanged, &controller, syncDesktopFiles);
         syncDesktopFiles();
     }
@@ -343,20 +290,17 @@ int main(int argc, char *argv[])
     if (parser.isSet(addOption)) {
         controller.capture(parser.value(addOption));
     } else if (!parser.isSet(hiddenOption)) {
-        if (shell)
-            shell->show();
-        else
-            window->show();
+        shell->show();
     }
     if (parser.isSet(captureOption))
         Q_EMIT controller.showCaptureRequested();
 
     // Development aid: TUMBLER_SCREENSHOT=out.png [TUMBLER_PAGE=tasks] [TUMBLER_SHOT_SIZE=WxH]
-    // renders a page, saves it and quits. Use with QT_QPA_PLATFORM=offscreen.
-    // "today|plan" runs steps 700 ms apart, like clicking through.
-    if (sandboxed && shell) {
-        // The web UI: steps once the page has loaded, then a grab of the window.
-        // Steps are split on "|" as for QML.
+    // [TUMBLER_COLOR_SCHEME=dark] renders a page, saves it and quits. Use with
+    // QT_QPA_PLATFORM=offscreen. "today|js:…" runs steps 700 ms apart, like
+    // clicking through.
+    if (sandboxed) {
+        // Steps once the page has loaded, then a grab of the window.
         const QStringList steps = qEnvironmentVariable("TUMBLER_PAGE", QStringLiteral("today")).split(QLatin1Char('|'));
         const QStringList size = qEnvironmentVariable("TUMBLER_SHOT_SIZE").split(QLatin1Char('x'));
         if (size.size() == 2 && size[0].toInt() > 0 && size[1].toInt() > 0)
@@ -393,53 +337,6 @@ int main(int argc, char *argv[])
         QTimer::singleShot(30000, &app, [] {
             qCritical("Screenshot timed out");
             QCoreApplication::exit(1);
-        });
-    } else if (sandboxed) {
-        auto *quickWindow = qobject_cast<QQuickWindow *>(window);
-        const QStringList steps = qEnvironmentVariable("TUMBLER_PAGE", QStringLiteral("today")).split(QLatin1Char('|'));
-        // TUMBLER_SHOT_SIZE=1100x2400 for a taller look at long pages.
-        const QStringList size = qEnvironmentVariable("TUMBLER_SHOT_SIZE").split(QLatin1Char('x'));
-        if (size.size() == 2 && size[0].toInt() > 0 && size[1].toInt() > 0)
-            quickWindow->resize(size[0].toInt(), size[1].toInt());
-        quickWindow->show();
-        for (qsizetype i = 0; i < steps.size(); ++i) {
-            QTimer::singleShot(300 + int(i) * 700, quickWindow, [quickWindow, step = steps.at(i)] {
-                if (step == QLatin1String("plan"))
-                    QMetaObject::invokeMethod(quickWindow, "openPlan");
-                else
-                    QMetaObject::invokeMethod(quickWindow, "showPage", Q_ARG(QVariant, step));
-            });
-        }
-        // TUMBLER_SHOT_DELAY keeps a sandboxed instance up longer (e.g. to
-        // point a headless browser at its phone server).
-        const int delay = qEnvironmentVariableIntValue("TUMBLER_SHOT_DELAY") > 0 ? qEnvironmentVariableIntValue("TUMBLER_SHOT_DELAY") : 1500;
-        QTimer::singleShot(delay + int(steps.size() - 1) * 700, quickWindow, [quickWindow, shot] {
-            quickWindow->grabWindow().save(shot);
-            // TUMBLER_PROBE=x,y lists the visible items covering that point.
-            const QStringList probe = qEnvironmentVariable("TUMBLER_PROBE").split(QLatin1Char(','));
-            if (probe.size() == 2) {
-                const QPointF pt(probe[0].toDouble(), probe[1].toDouble());
-                std::function<void(QQuickItem *, int)> walk = [&](QQuickItem *item, int depth) {
-                    if (!item->isVisible() || item->opacity() == 0)
-                        return;
-                    const QRectF r = item->mapRectToScene(QRectF(0, 0, item->width(), item->height()));
-                    if (r.contains(pt) && r.width() < 400)
-                        qInfo().noquote() << QString(depth, QLatin1Char(' ')) << item->metaObject()->className() << item->objectName() << r;
-                    for (QQuickItem *c : item->childItems())
-                        walk(c, depth + 1);
-                };
-                walk(quickWindow->contentItem(), 0);
-            }
-            // Other open windows (quick capture) go next to it.
-            for (QWindow *w : QGuiApplication::topLevelWindows()) {
-                auto *qw = qobject_cast<QQuickWindow *>(w);
-                if (qw && qw != quickWindow && qw->isVisible()) {
-                    QString name = shot;
-                    name.insert(name.lastIndexOf(QLatin1Char('.')), QLatin1Char('-') + qw->title().toLower().replace(QLatin1Char(' '), QLatin1Char('-')));
-                    qw->grabWindow().save(name);
-                }
-            }
-            QCoreApplication::quit();
         });
     }
 

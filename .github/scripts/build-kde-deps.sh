@@ -6,7 +6,6 @@ set -euo pipefail
 
 PREFIX="${1:-$HOME/kde-deps}"
 KF_VERSION="${KF_VERSION:-v6.31.0}"
-ADDONS_VERSION="${ADDONS_VERSION:-v1.15.0}"
 QT_PREFIX="$(brew --prefix qt)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -37,16 +36,4 @@ build frameworks/kconfig "$KF_VERSION"
 build frameworks/kwindowsystem "$KF_VERSION"
 build frameworks/knotifications "$KF_VERSION"
 build frameworks/kstatusnotifieritem "$KF_VERSION"
-build frameworks/kirigami "$KF_VERSION"
-build frameworks/kguiaddons "$KF_VERSION" -DWITH_WAYLAND=OFF -DWITH_X11=OFF
-build frameworks/kcolorscheme "$KF_VERSION"
-build frameworks/kcrash "$KF_VERSION"
-build frameworks/karchive "$KF_VERSION"
-build frameworks/kwidgetsaddons "$KF_VERSION"
-# The icons go into a library, not loose files; KIconThemes links it in and
-# the app picks the theme up with KIconTheme::initTheme().
-build frameworks/breeze-icons "$KF_VERSION" -DWITH_ICON_GENERATION=OFF -DSKIP_INSTALL_ICONS=ON
-build frameworks/kiconthemes "$KF_VERSION"
-build libraries/kirigami-addons "$ADDONS_VERSION"
 build frameworks/kcalendarcore "$KF_VERSION"
-build frameworks/prison "$KF_VERSION"

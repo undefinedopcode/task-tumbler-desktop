@@ -4,7 +4,6 @@
 #include "queries.h"
 
 #include <QAbstractListModel>
-#include <QQmlEngine>
 
 namespace tumbler {
 
@@ -13,8 +12,6 @@ namespace tumbler {
 class TaskListModel : public QAbstractListModel
 {
     Q_OBJECT
-    QML_ELEMENT
-    QML_UNCREATABLE("Provided by AppController")
 
     // "active" (pending + in progress), "completed", "all"
     Q_PROPERTY(QString filter READ filter WRITE setFilter NOTIFY filterChanged)

@@ -5,7 +5,6 @@
 
 #include <QNetworkAccessManager>
 #include <QObject>
-#include <QQmlEngine>
 #include <QTimer>
 #include <QVariantMap>
 
@@ -22,8 +21,6 @@ class KeyStore;
 class SyncHub : public QObject
 {
     Q_OBJECT
-    QML_ELEMENT
-    QML_SINGLETON
 
     // {syncing, linear: {enabled, user, teams, teamKeys, includeBacklog, error, lastSync, summary},
     //  feeds: [{id, name, url, color, blocking, enabled, error, lastSync, count}]}
@@ -32,7 +29,6 @@ class SyncHub : public QObject
 public:
     SyncHub(AppController *app, KeyStore *keys, QObject *parent = nullptr);
 
-    static SyncHub *create(QQmlEngine *, QJSEngine *);
     static void setInstance(SyncHub *hub);
 
     QVariantMap state() const;

@@ -48,12 +48,6 @@ SyncHub::SyncHub(AppController *app, KeyStore *keys, QObject *parent)
     connect(&m_deviceChanged, &QTimer::timeout, this, &SyncHub::syncDeviceFeeds);
 }
 
-SyncHub *SyncHub::create(QQmlEngine *, QJSEngine *)
-{
-    QJSEngine::setObjectOwnership(s_instance, QJSEngine::CppOwnership);
-    return s_instance;
-}
-
 void SyncHub::setInstance(SyncHub *hub)
 {
     s_instance = hub;

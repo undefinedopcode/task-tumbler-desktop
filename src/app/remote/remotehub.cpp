@@ -59,12 +59,6 @@ RemoteHub::RemoteHub(AppController *app, const QString &secretsPath, QObject *pa
 
 RemoteHub::~RemoteHub() = default;
 
-RemoteHub *RemoteHub::create(QQmlEngine *, QJSEngine *)
-{
-    QJSEngine::setObjectOwnership(s_instance, QJSEngine::CppOwnership);
-    return s_instance;
-}
-
 void RemoteHub::setInstance(RemoteHub *hub)
 {
     s_instance = hub;

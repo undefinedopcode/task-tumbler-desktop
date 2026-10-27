@@ -9,7 +9,6 @@
 
 #include <QNetworkAccessManager>
 #include <QObject>
-#include <QQmlEngine>
 #include <QSet>
 #include <QTimer>
 #include <QUndoStack>
@@ -25,14 +24,12 @@ struct Result;
 }
 class KeyStore;
 
-// The one object QML talks to. Every write goes through apply(): a Mutation
+// The one object the UI talks to. Every write goes through apply(): a Mutation
 // from core/operations runs, lands on the undo stack, and `changed` tells
 // views which tables moved. Reads are plain Q_INVOKABLEs returning maps.
 class AppController : public QObject
 {
     Q_OBJECT
-    QML_ELEMENT
-    QML_SINGLETON
 
     Q_PROPERTY(QVariantMap today READ today NOTIFY todayChanged)
     Q_PROPERTY(QVariantList categories READ categories NOTIFY categoriesChanged)
@@ -61,7 +58,6 @@ public:
     explicit AppController(Database &db, QObject *parent = nullptr, KeyStore *keys = nullptr);
     ~AppController() override;
 
-    static AppController *create(QQmlEngine *, QJSEngine *);
     static void setInstance(AppController *instance);
 
     QVariantMap today() const { return m_today; }
@@ -294,7 +290,7 @@ Q_SIGNALS:
     void commandNeedsApproval(const QString &actionId, const QString &taskTitle, const QString &command);
     void workStarted(const QString &taskId);
     void openTaskRequested(const QString &taskId);
-    // Show a page by its name in Main.qml (from a notification, say).
+    // Show a page by its name (from a notification, say).
     void pageRequested(const QString &name);
     void weekSummaryReady(const QVariantMap &summary);
 
