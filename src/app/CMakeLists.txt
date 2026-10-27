@@ -11,6 +11,7 @@ qt_add_executable(task-tumbler
     desktop/idlewatch.h desktop/idlewatch.cpp
     desktop/externalapi.h desktop/externalapi.cpp
     desktop/apps.h desktop/presence.h desktop/hotkey.h
+    desktop/devicecalendars.h desktop/devicecalendars.cpp
     remote/remotehub.h remote/remotehub.cpp
     sync/synchub.h sync/synchub.cpp
 )
@@ -53,6 +54,7 @@ qt_add_qml_module(task-tumbler
         qml/components/CategoryDialog.qml
         qml/components/EventDialog.qml
         qml/components/FeedDialog.qml
+        qml/components/DeviceCalendarsDialog.qml
         qml/components/EnergyCheckIn.qml
         qml/components/LauncherDialog.qml
         qml/components/Format.qml

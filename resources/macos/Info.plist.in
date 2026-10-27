@@ -23,7 +23,9 @@
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.productivity</string>
     <key>LSMinimumSystemVersion</key>
-    <string>13.0</string>
+    <string>15.0</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Task Tumbler shows your calendar events on its schedule and plans tasks around them. It only reads them; it never changes your calendars.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>

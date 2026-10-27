@@ -32,7 +32,8 @@ if(BUILD_APP)
         ${APP_DIR}/appcontroller.h ${APP_DIR}/appcontroller.cpp ${APP_DIR}/appcontroller_ai.cpp
         ${APP_DIR}/appcontroller_desktop.cpp ${APP_DIR}/appcontroller_external.cpp ${APP_DIR}/appcontroller_notes.cpp ${APP_DIR}/appcontroller_stats.cpp ${APP_DIR}/appcontroller_review.cpp
         ${APP_DIR}/desktop/externalapi.h ${APP_DIR}/desktop/externalapi.cpp
-        ${APP_DIR}/desktop/apps.h ${APP_DIR}/desktop/apps_${TUMBLER_PLATFORM}.cpp
+        ${APP_DIR}/desktop/apps.h ${APP_DIR}/desktop/devicecalendars.h ${APP_DIR}/desktop/devicecalendars.cpp
+        ${TUMBLER_CONTROLLER_PLATFORM_SOURCES}
         ${APP_DIR}/remote/remotehub.h ${APP_DIR}/remote/remotehub.cpp
         ${APP_DIR}/sync/synchub.h ${APP_DIR}/sync/synchub.cpp
         ${APP_DIR}/keystore.h ${APP_DIR}/keystore.cpp

@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(task-tumbler VERSION 0.1.0 LANGUAGES CXX)
+if(APPLE)
+    enable_language(OBJCXX) # EventKit (src/app/desktop/*_mac.mm)
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -38,21 +41,25 @@ if(BUILD_APP)
     # and *_mac.cpp): opening apps, idle time, the global shortcut, login items.
     set(APP_DESKTOP ${PROJECT_SOURCE_DIR}/src/app/desktop)
     if(APPLE)
-        set(TUMBLER_PLATFORM mac)
-        set(TUMBLER_PLATFORM_SOURCES
-            ${APP_DESKTOP}/apps_mac.cpp ${APP_DESKTOP}/presence_mac.cpp ${APP_DESKTOP}/hotkey_mac.cpp
+        # What the controller itself needs (the tests build these too)...
+        set(TUMBLER_CONTROLLER_PLATFORM_SOURCES ${APP_DESKTOP}/apps_mac.cpp ${APP_DESKTOP}/devicecalendars_mac.mm)
+        set_source_files_properties(${APP_DESKTOP}/devicecalendars_mac.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+        # ...and the rest of the app.
+        set(TUMBLER_PLATFORM_SOURCES ${TUMBLER_CONTROLLER_PLATFORM_SOURCES}
+            ${APP_DESKTOP}/presence_mac.cpp ${APP_DESKTOP}/hotkey_mac.cpp
             ${APP_DESKTOP}/idlewatch_mac.cpp ${APP_DESKTOP}/autostart_mac.cpp)
         # KIconThemes brings the Breeze icons along, built in.
         find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS IconThemes)
-        set(TUMBLER_PLATFORM_LIBRARIES KF6::IconThemes "-framework Carbon" "-framework CoreGraphics" "-framework CoreFoundation")
+        set(TUMBLER_PLATFORM_LIBRARIES KF6::IconThemes "-framework Carbon" "-framework CoreGraphics" "-framework CoreFoundation"
+            "-framework EventKit" "-framework AppKit")
         set(TUMBLER_PLATFORM_DEFINITIONS "")
     else()
         # Plus the session bus: scripts, KRunner and Do Not Disturb.
         find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS DBus)
         find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS GlobalAccel KIO Service IdleTime)
-        set(TUMBLER_PLATFORM linux)
-        set(TUMBLER_PLATFORM_SOURCES
-            ${APP_DESKTOP}/apps_linux.cpp ${APP_DESKTOP}/presence_linux.cpp ${APP_DESKTOP}/hotkey_linux.cpp
+        set(TUMBLER_CONTROLLER_PLATFORM_SOURCES ${APP_DESKTOP}/apps_linux.cpp ${APP_DESKTOP}/devicecalendars_linux.cpp)
+        set(TUMBLER_PLATFORM_SOURCES ${TUMBLER_CONTROLLER_PLATFORM_SOURCES}
+            ${APP_DESKTOP}/presence_linux.cpp ${APP_DESKTOP}/hotkey_linux.cpp
             ${APP_DESKTOP}/idlewatch_linux.cpp ${APP_DESKTOP}/autostart_linux.cpp
             ${APP_DESKTOP}/focusguard.h ${APP_DESKTOP}/focusguard.cpp ${APP_DESKTOP}/krunner.h ${APP_DESKTOP}/krunner.cpp)
         set(TUMBLER_PLATFORM_LIBRARIES Qt6::DBus KF6::KIOGui KF6::Service KF6::IdleTime KF6::GlobalAccel)

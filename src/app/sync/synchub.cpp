@@ -1,6 +1,7 @@
 #include "synchub.h"
 
 #include "appcontroller.h"
+#include "desktop/devicecalendars.h"
 #include "keystore.h"
 #include "operations.h"
 
@@ -42,6 +43,9 @@ SyncHub::SyncHub(AppController *app, KeyStore *keys, QObject *parent)
             m_push.start();
     });
     connect(app, &AppController::settingsChanged, this, &SyncHub::stateChanged);
+    m_deviceChanged.setSingleShot(true);
+    m_deviceChanged.setInterval(2000);
+    connect(&m_deviceChanged, &QTimer::timeout, this, &SyncHub::syncDeviceFeeds);
 }
 
 SyncHub *SyncHub::create(QQmlEngine *, QJSEngine *)
@@ -62,6 +66,7 @@ void SyncHub::setAutomatic(bool on)
         return;
     }
     m_every.start();
+    watchDeviceCalendars();
     // Shortly after start, once the window is up and the network likely is.
     QTimer::singleShot(20000, this, &SyncHub::syncNow);
 }
@@ -120,6 +125,7 @@ QVariantMap SyncHub::state() const
         m.insert(QStringLiteral("error"), st.error);
         m.insert(QStringLiteral("lastSync"), st.lastSync);
         m.insert(QStringLiteral("count"), st.count);
+        m.insert(QStringLiteral("device"), devicecalendars::calendarOf(f.url).has_value());
         feedList.append(m);
     }
     QVariantMap linear = s.toVariantMap();
@@ -302,22 +308,54 @@ void SyncHub::pushNext(const QString &integrationId, QList<sync::PendingPush> pe
 
 void SyncHub::syncFeed(const sync::FeedSettings &feed, const QByteArray &data, QString *error)
 {
-    const QTimeZone zone = m_app->zone();
     const qint64 now = m_app->now();
-    const QDateTime from = QDateTime::fromMSecsSinceEpoch(now - kDay, zone);
-    const QDateTime to = QDateTime::fromMSecsSinceEpoch(now + 60 * kDay, zone);
-    const QList<sync::RemoteEvent> events = sync::parseIcs(data, feed, from, to, error);
-    if (!error->isEmpty())
-        return;
-    sync::FeedResult r;
-    const auto m = sync::pullFeed(m_app->queries(), integration(QStringLiteral("ics")), feed.id, events, from.toMSecsSinceEpoch(),
-                                  to.toMSecsSinceEpoch(), QString::fromUtf8(zone.id()), now, &r, error);
-    if (m)
-        m_app->applyExternal(*m, error);
+    const QDateTime from = QDateTime::fromMSecsSinceEpoch(now - kDay, m_app->zone());
+    const QDateTime to = QDateTime::fromMSecsSinceEpoch(now + 60 * kDay, m_app->zone());
+    QList<sync::RemoteEvent> events;
+    if (const auto calendar = devicecalendars::calendarOf(feed.url))
+        events = devicecalendars::toRemoteEvents(devicecalendars::occurrences(*calendar, from, to, error), feed);
+    else
+        events = sync::parseIcs(data, feed, from, to, error);
+    applyFeed(feed, events, from.toMSecsSinceEpoch(), to.toMSecsSinceEpoch(), *error);
+    *error = m_feedStatus.value(feed.id).error;
+}
+
+void SyncHub::applyFeed(const sync::FeedSettings &feed, const QList<sync::RemoteEvent> &events, qint64 from, qint64 to,
+                        const QString &parseError)
+{
+    const qint64 now = m_app->now();
+    QString error = parseError;
+    if (error.isEmpty()) {
+        sync::FeedResult r;
+        const auto m = sync::pullFeed(m_app->queries(), integration(QStringLiteral("ics")), feed.id, events, from, to,
+                                      QString::fromUtf8(m_app->zone().id()), now, &r, &error);
+        if (m)
+            m_app->applyExternal(*m, &error);
+    }
     FeedStatus &st = m_feedStatus[feed.id];
-    st.error = *error;
-    st.lastSync = now;
-    st.count = int(events.size());
+    st.error = error;
+    if (error.isEmpty()) {
+        st.lastSync = now;
+        st.count = int(events.size());
+    }
+}
+
+void SyncHub::refreshFeed(const sync::FeedSettings &feed, std::function<void()> done)
+{
+    if (devicecalendars::calendarOf(feed.url)) {
+        QString error;
+        syncFeed(feed, {}, &error);
+        done();
+        return;
+    }
+    m_fetcher.fetch(feed.url, [this, feed, done](const QByteArray &data, const QString &fetchError) {
+        QString error = fetchError;
+        if (error.isEmpty())
+            syncFeed(feed, data, &error);
+        else
+            m_feedStatus[feed.id].error = error;
+        done();
+    });
 }
 
 void SyncHub::syncFeeds(std::function<void()> done)
@@ -333,16 +371,91 @@ void SyncHub::syncFeeds(std::function<void()> done)
     }
     auto left = std::make_shared<int>(int(todo.size()));
     for (const sync::FeedSettings &f : todo) {
-        m_fetcher.fetch(f.url, [this, f, left, done](const QByteArray &data, const QString &fetchError) {
-            QString error = fetchError;
-            if (error.isEmpty())
-                syncFeed(f, data, &error);
-            else
-                m_feedStatus[f.id].error = error;
+        refreshFeed(f, [left, done] {
             if (--*left == 0)
                 done();
         });
     }
+}
+
+void SyncHub::syncDeviceFeeds()
+{
+    for (const sync::FeedSettings &f : feeds()) {
+        if (f.enabled && devicecalendars::calendarOf(f.url))
+            refreshFeed(f, [] {});
+    }
+    Q_EMIT stateChanged();
+}
+
+void SyncHub::watchDeviceCalendars()
+{
+    if (m_watchingDevice || !devicecalendars::supported() || devicecalendars::access() != devicecalendars::Access::Granted)
+        return;
+    m_watchingDevice = true;
+    devicecalendars::watch(this, [this] { m_deviceChanged.start(); });
+}
+
+QVariantMap SyncHub::deviceCalendars() const
+{
+    using devicecalendars::Access;
+    const Access access = devicecalendars::supported() ? devicecalendars::access() : Access::Denied;
+    QHash<QString, QString> added; // calendar id -> feed id
+    for (const sync::FeedSettings &f : feeds()) {
+        if (const auto calendar = devicecalendars::calendarOf(f.url))
+            added.insert(*calendar, f.id);
+    }
+    QVariantList list;
+    for (const devicecalendars::Calendar &c : devicecalendars::calendars()) {
+        list.append(QVariantMap{{QStringLiteral("id"), c.id},
+                                {QStringLiteral("title"), c.title},
+                                {QStringLiteral("account"), c.account},
+                                {QStringLiteral("color"), c.color},
+                                {QStringLiteral("feedId"), added.value(c.id)}});
+    }
+    return {
+        {QStringLiteral("supported"), devicecalendars::supported()},
+        {QStringLiteral("access"), access == Access::Granted ? QStringLiteral("granted")
+                                   : access == Access::NotAsked ? QStringLiteral("notAsked")
+                                                                : QStringLiteral("denied")},
+        {QStringLiteral("calendars"), list},
+    };
+}
+
+void SyncHub::requestCalendarAccess()
+{
+    devicecalendars::requestAccess(this, [this](bool granted) {
+        if (granted)
+            watchDeviceCalendars();
+        Q_EMIT deviceCalendarsChanged();
+    });
+}
+
+void SyncHub::addDeviceCalendar(const QString &calendarId)
+{
+    const QList<devicecalendars::Calendar> all = devicecalendars::calendars();
+    const auto it = std::find_if(all.cbegin(), all.cend(), [&](const devicecalendars::Calendar &c) { return c.id == calendarId; });
+    if (it == all.cend()) {
+        Q_EMIT feedFailed(QStringLiteral("that calendar isn't on this computer"));
+        return;
+    }
+    for (const sync::FeedSettings &f : feeds()) {
+        if (f.url == devicecalendars::feedUrl(calendarId))
+            return; // already there
+    }
+    sync::FeedSettings f;
+    f.id = newId();
+    f.name = it->title;
+    f.url = devicecalendars::feedUrl(calendarId);
+    f.color = it->color;
+    QList<sync::FeedSettings> list = feeds();
+    list.append(f);
+    saveFeeds(list);
+    QString error;
+    syncFeed(f, {}, &error);
+    Q_EMIT stateChanged();
+    Q_EMIT deviceCalendarsChanged();
+    Q_EMIT feedAdded(f.id);
+    Q_EMIT m_app->message(QStringLiteral("Showing “%1” on your schedule").arg(f.name));
 }
 
 void SyncHub::addFeed(const QVariantMap &v)
@@ -397,15 +510,7 @@ void SyncHub::updateFeed(const QString &id, const QVariantMap &changes)
             Q_EMIT stateChanged();
             return;
         }
-        const sync::FeedSettings copy = f;
-        m_fetcher.fetch(copy.url, [this, copy](const QByteArray &data, const QString &fetchError) {
-            QString error = fetchError;
-            if (error.isEmpty())
-                syncFeed(copy, data, &error);
-            else
-                m_feedStatus[copy.id].error = error;
-            Q_EMIT stateChanged();
-        });
+        refreshFeed(f, [this] { Q_EMIT stateChanged(); });
         return;
     }
 }
@@ -422,6 +527,7 @@ void SyncHub::removeFeed(const QString &id)
     m_app->applyExternal(sync::dropFeed(integration(QStringLiteral("ics")), id));
     m_feedStatus.remove(id);
     saveFeeds(list);
+    Q_EMIT deviceCalendarsChanged();
     if (!name.isEmpty())
         Q_EMIT m_app->message(QStringLiteral("Unsubscribed from “%1”").arg(name));
 }

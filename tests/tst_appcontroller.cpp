@@ -1,4 +1,5 @@
 #include "appcontroller.h"
+#include "desktop/devicecalendars.h"
 #include "desktop/externalapi.h"
 #include "ipc.h"
 #include "keystore.h"
@@ -1158,6 +1159,56 @@ private slots:
         QTRY_COMPARE(scalar(*m_db, "SELECT COUNT(*) FROM events").toInt(), 1);
         hub.removeFeed(feedId);
         QCOMPARE(scalar(*m_db, "SELECT COUNT(*) FROM events").toInt(), 0);
+        QVERIFY(hub.state().value("feeds").toList().isEmpty());
+    }
+
+    void deviceCalendarEvents()
+    {
+        using namespace devicecalendars;
+        QCOMPARE(calendarOf(feedUrl("ABC-123")).value_or(QString()), QStringLiteral("ABC-123"));
+        QVERIFY(!calendarOf("https://example.com/cal.ics"));
+        QVERIFY(!calendarOf("device:"));
+
+        sync::FeedSettings feed;
+        feed.color = "#123456";
+        feed.blocking = BlockingMode::RecurringOnly;
+        devicecalendars::Occurrence meeting;
+        meeting.id = "m@1";
+        meeting.title = "Standup";
+        meeting.start = 1000;
+        meeting.end = 500; // ends before it starts: clamped
+        devicecalendars::Occurrence holiday;
+        holiday.id = "h@2";
+        holiday.allDay = true;
+        holiday.startDate = QDate(2026, 12, 24);
+        holiday.endDate = QDate(2026, 12, 26);
+        holiday.free = true;
+        const QList<sync::RemoteEvent> events = toRemoteEvents({meeting, holiday}, feed);
+        QCOMPARE(events.size(), 2);
+        QCOMPARE(events[0].externalId, QStringLiteral("h@2")); // sorted by id
+        QVERIFY(events[0].event.allDay);
+        QCOMPARE(events[0].event.endDate, QDate(2026, 12, 26));
+        QCOMPARE(events[0].event.title, QStringLiteral("(busy)"));
+        QCOMPARE(events[0].event.blocking.mode, BlockingMode::None); // shown as free
+        QCOMPARE(events[1].event.title, QStringLiteral("Standup"));
+        QCOMPARE(events[1].event.endAt, qint64(1000));
+        QCOMPARE(events[1].event.blocking.mode, BlockingMode::RecurringOnly);
+        QCOMPARE(events[1].event.color, QStringLiteral("#123456"));
+
+        // Here (Linux) there's nothing to read: a device feed says so rather than failing quietly.
+        FakeKeyStore keys;
+        SyncHub hub(m_app.get(), &keys);
+        QCOMPARE(hub.deviceCalendars().value("supported").toBool(), supported());
+        QJsonArray stored{QJsonObject{{"id", "f1"}, {"name", "Work"}, {"url", feedUrl("X")}, {"enabled", true}}};
+        m_app->setSetting("calendar_feeds", stored);
+        QSignalSpy done(&hub, &SyncHub::syncFinished);
+        hub.syncNow();
+        QTRY_COMPARE(done.size(), 1);
+        const QVariantMap f = hub.state().value("feeds").toList().first().toMap();
+        QVERIFY(f.value("device").toBool());
+        if (!supported())
+            QVERIFY(!f.value("error").toString().isEmpty());
+        hub.removeFeed("f1");
         QVERIFY(hub.state().value("feeds").toList().isEmpty());
     }
 

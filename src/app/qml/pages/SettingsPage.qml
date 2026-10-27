@@ -12,6 +12,7 @@ FormCard.FormCardPage {
 
     readonly property var s: AppController.settings
     readonly property bool mac: Qt.platform.os === "osx"
+    readonly property bool deviceCalendars: SyncHub.deviceCalendars().supported
     property string importReport: ""
 
     title: i18n("Settings")
@@ -202,8 +203,15 @@ FormCard.FormCardPage {
             }
         }
         FormCard.FormButtonDelegate {
+            visible: page.deviceCalendars
+            icon.name: "view-calendar"
+            text: i18n("Calendars on this Mac…")
+            description: (SyncHub.state.feeds || []).length === 0 ? i18n("iCloud, Google, Exchange: whatever's in the Calendar app, updated as it changes") : ""
+            onClicked: deviceCalendarsDialog.start()
+        }
+        FormCard.FormButtonDelegate {
             icon.name: "list-add"
-            text: i18n("Subscribe to a calendar…")
+            text: page.deviceCalendars ? i18n("Subscribe by address…") : i18n("Subscribe to a calendar…")
             description: (SyncHub.state.feeds || []).length === 0 ? i18n("Its events show on your schedule and keep tasks out of busy times. Read-only; refreshed every 15 minutes.") : ""
             onClicked: feedDialog.start()
         }
@@ -216,6 +224,7 @@ FormCard.FormCardPage {
         }
     }
     FeedDialog { id: feedDialog }
+    DeviceCalendarsDialog { id: deviceCalendarsDialog }
 
     FormCard.FormHeader { title: i18n("Phone") }
     FormCard.FormCard {

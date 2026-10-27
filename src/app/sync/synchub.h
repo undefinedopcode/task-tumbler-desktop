@@ -52,11 +52,21 @@ public:
 
     Q_INVOKABLE void syncNow();
 
+    // Calendars already on this computer (macOS: Calendar.app's, through
+    // EventKit). {supported, access: "notAsked"|"granted"|"denied",
+    //  calendars: [{id, title, account, color, feedId}]}; feedId is set for
+    // the ones already added.
+    Q_INVOKABLE QVariantMap deviceCalendars() const;
+    // The system's one-time prompt; answers with deviceCalendarsChanged().
+    Q_INVOKABLE void requestCalendarAccess();
+    Q_INVOKABLE void addDeviceCalendar(const QString &calendarId);
+
 Q_SIGNALS:
     void stateChanged();
     void syncFinished();
     void feedAdded(const QString &id);
     void feedFailed(const QString &error);
+    void deviceCalendarsChanged();
 
 private:
     QJsonObject linearSettings() const;
@@ -71,7 +81,12 @@ private:
     void pushCompletions();
     void pushNext(const QString &integrationId, QList<sync::PendingPush> pending);
     void syncFeed(const sync::FeedSettings &feed, const QByteArray &data, QString *error);
+    // A device: feed reads the computer's calendar; others are fetched.
+    void refreshFeed(const sync::FeedSettings &feed, std::function<void()> done);
+    void applyFeed(const sync::FeedSettings &feed, const QList<sync::RemoteEvent> &events, qint64 from, qint64 to, const QString &parseError);
     void syncFeeds(std::function<void()> done);
+    void syncDeviceFeeds();
+    void watchDeviceCalendars();
     void finishOne();
 
     AppController *m_app;
@@ -81,6 +96,8 @@ private:
     sync::FeedFetcher m_fetcher;
     QTimer m_every;
     QTimer m_push;
+    QTimer m_deviceChanged; // calendar edits come in bursts
+    bool m_watchingDevice = false;
     bool m_keyLoaded = false;
     bool m_pushing = false;
     int m_running = 0;
