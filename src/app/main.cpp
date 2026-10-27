@@ -368,14 +368,25 @@ int main(int argc, char *argv[])
                 qWarning("The web UI didn't load");
             for (qsizetype i = 0; i < steps.size(); ++i)
                 QTimer::singleShot(300 + int(i) * 700, shell.get(), [&shell, step = steps.at(i)] {
-                    // "js:<code>" runs in the page (clicks, calls); anything else is a page name.
-                    if (step.startsWith(QLatin1String("js:")))
+                    // "js:<code>" runs in the page (clicks, calls), "capture" opens quick
+                    // capture, "capture-js:<code>" runs in its page; anything else is a page name.
+                    if (step == QLatin1String("capture"))
+                        shell->capture()->open();
+                    else if (step.startsWith(QLatin1String("capture-js:")))
+                        shell->capture()->view()->page()->runJavaScript(step.mid(11));
+                    else if (step.startsWith(QLatin1String("js:")))
                         shell->view()->page()->runJavaScript(step.mid(3));
                     else
                         shell->showPage(step);
                 });
             QTimer::singleShot(delay + int(steps.size() - 1) * 700, shell.get(), [&shell, shot] {
                 shell->grab().save(shot);
+                // The quick-capture window, when open, goes next to it.
+                if (shell->capture()->isVisible()) {
+                    QString name = shot;
+                    name.insert(name.lastIndexOf(QLatin1Char('.')), QStringLiteral("-quick-capture"));
+                    shell->capture()->grab().save(name);
+                }
                 QCoreApplication::quit();
             });
         });

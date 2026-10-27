@@ -23,6 +23,7 @@ class ShellBridge : public QObject
     // The system accent colour (#rrggbb), for those who want it.
     Q_PROPERTY(QString accent READ accent NOTIFY colorSchemeChanged)
     Q_PROPERTY(bool sandboxed READ sandboxed CONSTANT)
+    Q_PROPERTY(bool fullScreen READ fullScreen WRITE setFullScreen NOTIFY fullScreenChanged)
 
 public:
     ShellBridge(AppController *app, QWidget *window, bool sandboxed, QObject *parent = nullptr);
@@ -31,6 +32,9 @@ public:
     QString colorScheme() const;
     QString accent() const;
     bool sandboxed() const { return m_sandboxed; }
+    bool fullScreen() const;
+    void setFullScreen(bool on);
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 public Q_SLOTS:
     void hideWindow();
@@ -43,6 +47,7 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void colorSchemeChanged();
+    void fullScreenChanged();
 
 private:
     // Settings → Appearance, else the system (or TUMBLER_COLOR_SCHEME).

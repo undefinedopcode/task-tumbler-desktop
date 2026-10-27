@@ -99,12 +99,21 @@ export interface CapturePreview {
   fromAi?: boolean
 }
 
+export interface CategoryDay {
+  day: number // 0 = Sunday
+  name?: string
+  enabled: boolean
+  start: string
+  end: string
+}
+
 export interface Category {
   id: string
   name: string
   color: string
   isDefault: boolean
   showOnSchedule: boolean
+  days?: CategoryDay[]
 }
 
 export type Settings = Record<string, unknown>

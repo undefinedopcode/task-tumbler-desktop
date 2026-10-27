@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QDesktopServices>
+#include <QEvent>
 #include <QFileDialog>
 #include <QPalette>
 #include <QStyleHints>
@@ -22,6 +23,7 @@ ShellBridge::ShellBridge(AppController *app, QWidget *window, bool sandboxed, QO
     // Settings → Appearance (or TUMBLER_COLOR_SCHEME=dark|light, for
     // screenshots) overrides the system. Not every platform takes the request
     // (offscreen doesn't), so colorScheme() answers it too.
+    window->installEventFilter(this);
     connect(app, &AppController::settingsChanged, this, &ShellBridge::applyAppearance);
     applyAppearance();
 }
@@ -70,6 +72,24 @@ QString ShellBridge::colorScheme() const
 QString ShellBridge::accent() const
 {
     return QGuiApplication::palette().color(QPalette::Accent).name();
+}
+
+bool ShellBridge::fullScreen() const
+{
+    return m_window->isFullScreen();
+}
+
+void ShellBridge::setFullScreen(bool on)
+{
+    if (on != fullScreen())
+        m_window->setWindowState(m_window->windowState() ^ Qt::WindowFullScreen);
+}
+
+bool ShellBridge::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == m_window && event->type() == QEvent::WindowStateChange)
+        Q_EMIT fullScreenChanged();
+    return QObject::eventFilter(watched, event);
 }
 
 void ShellBridge::hideWindow()

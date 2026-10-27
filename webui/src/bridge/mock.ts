@@ -387,6 +387,43 @@ export function createMock(): Objects {
   if (params.get('platform')) shell.platform = params.get('platform')
   if (params.get('scheme')) shell.colorScheme = params.get('scheme')
 
+  // Insight and reflection pages: small, plausible numbers.
+  const dayLabels = Array.from({ length: 14 }, (_, i) => new Date(Date.now() - (13 - i) * 24 * HOUR))
+  app.categories = app.categories.map((c: any) => ({ ...c, days: [0, 1, 2, 3, 4, 5, 6].map((d) => ({ day: d, enabled: d > 0 && d < 6, start: '09:00', end: '17:00' })) }))
+  app.energyHistory = (_d: number, cb: any) =>
+    reply(cb, {
+      energy: [{ at: Date.now() - 2 * HOUR, level: 6, label: 'OK' }],
+      days: dayLabels.map((d, i) => ({ date: d.toISOString().slice(0, 10), label: d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' }), energy: 4 + ((i * 7) % 6), sleep: 60 + ((i * 13) % 35) })),
+    })
+  app.healthToday = (cb: any) => reply(cb, { sleep: 78 })
+  app.saveHealth = (_h: unknown, cb: any) => reply(cb, true)
+  app.stats = (_d: number, cb: any) =>
+    reply(cb, {
+      workedMinutes: 494, sessions: 16, averageSessionMinutes: 31, longestSessionMinutes: 65, finishedTasks: 8, finishedRoutines: 3, weekly: false,
+      bars: dayLabels.slice(7).map((d, i) => ({ label: d.toLocaleDateString(undefined, { weekday: 'short' }), workedMinutes: [0, 60, 25, 0, 120, 80, 140][i], finished: [0, 1, 1, 0, 3, 1, 2][i] })),
+      hours: Array.from({ length: 24 }, (_, h) => ({ hour: h, minutes: h >= 8 && h <= 17 ? ((h * 37) % 60) + 10 : 0, energy: h === 10 ? 7 : h === 15 ? 5 : null })),
+      tasks: [{ id: 't1', title: 'Review the budget', estimate: 45, worked: 101, sessions: 2, finished: true }],
+      estimates: { tasks: 8, ratio: 1.5, bySize: [{ size: '60', tasks: 6, ratio: 1.5 }], byCategory: [] },
+      moving: [], planWithPace: true, paceActive: true,
+    })
+  app.closeOut = (cb: any) =>
+    reply(cb, {
+      date: app.today.date, dateLabel: app.today.dateLabel, workedMinutes: 95,
+      wins: [{ taskId: 'x', title: 'Morning meds', at: Date.now() - 6 * HOUR, routine: true, workedMinutes: 0 }],
+      progress: [{ taskId: 'y', title: 'Deep work: API design', minutes: 70 }],
+      leftovers: app.today.overdue.map((o: AgendaItem) => ({ kind: 'block', id: o.id, taskId: o.taskId, title: o.title, start: o.start, end: o.end, timeless: false, earlier: false, dayLabel: '', bumps: o.bumpedCount })),
+      tomorrow: { date: '', label: 'Tomorrow', blocks: 2, routines: 1, events: 1, firstTitle: 'Standup', firstAt: Date.now() + 18 * HOUR },
+      noteId: '', note: '', closed: false,
+    })
+  app.weekReview = (cb: any) =>
+    reply(cb, {
+      rangeLabel: 'This week', workedMinutes: 494, sessions: 16, finishedTasks: 8, finishedRoutines: 3,
+      days: dayLabels.slice(7).map((d, i) => ({ label: d.toLocaleDateString(undefined, { weekday: 'short' }), workedMinutes: [0, 60, 25, 0, 120, 80, 140][i], finished: [0, 1, 1, 0, 3, 1, 2][i] })),
+      wins: [], moving: [{ taskId: 'm', title: 'Sort the photo backup', bumps: 3 }], stale: [], dueSoon: [], dayNotes: [], doneToday: false,
+    })
+  app.weekSummaryReady = signal()
+  app.aiCaptureReady = signal()
+
   // Settings: sync and the phone companion, enough to draw them.
   const sync: any = {
     state: { syncing: false, feeds: [{ id: 'f1', name: 'Work', url: 'https://example.com/work.ics', color: '#0ea5e9', enabled: true, lastSync: Date.now(), count: 42 }], linear: { enabled: false } },

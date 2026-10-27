@@ -5,6 +5,11 @@
 #include "shellbridge.h"
 
 #include <QCloseEvent>
+#include <QGuiApplication>
+#include <QKeySequence>
+#include <QMenuBar>
+#include <QScreen>
+#include <QVBoxLayout>
 #include <QDesktopServices>
 #include <QFile>
 #include <QJsonArray>
@@ -17,6 +22,7 @@
 #include <QWebEngineSettings>
 #include <QWebEngineView>
 #include <QWebEnginePage>
+#include <QCursor>
 
 namespace tumbler {
 
@@ -138,11 +144,20 @@ WebShell::WebShell(AppController *app, QObject *sync, QObject *remote, const Opt
             raiseWindow();
     });
 
-    m_view->setUrl(options.devUrl.isEmpty() ? QUrl(QStringLiteral("tumbler://app/")) : options.devUrl);
+    const QUrl base = options.devUrl.isEmpty() ? QUrl(QStringLiteral("tumbler://app/")) : options.devUrl;
+    m_view->setUrl(base);
+
+    m_capture = new CaptureWindow(app, profile, base, options.sandboxed);
+    connect(app, &AppController::showCaptureRequested, m_capture, &CaptureWindow::open);
+
+#ifdef Q_OS_MACOS
+    buildMenuBar();
+#endif
 }
 
 WebShell::~WebShell()
 {
+    delete m_capture; // its page shares this window's profile
     // The view before its page, and the page before its profile: as plain
     // children they'd go in the order they were made, profile first.
     QWebEnginePage *page = m_view->page();
@@ -156,6 +171,89 @@ void WebShell::showPage(const QString &name)
 {
     const QString arg = QString::fromUtf8(QJsonDocument(QJsonArray{name}).toJson(QJsonDocument::Compact));
     m_view->page()->runJavaScript(QStringLiteral("window.tumbler && window.tumbler.showPage(...%1)").arg(arg));
+}
+
+void WebShell::callPage(const QString &call)
+{
+    m_view->page()->runJavaScript(QStringLiteral("window.tumbler && window.tumbler.%1").arg(call));
+}
+
+void WebShell::buildMenuBar()
+{
+    // Built everywhere (so it compiles), shown only on macOS, where it is the
+    // system menu bar. Undo goes through the page: in a text field it's the
+    // field's own undo, elsewhere the app's.
+    QMenuBar *bar = menuBar();
+    const auto add = [this](QMenu *menu, const QString &text, const QKeySequence &keys, auto &&slot) {
+        QAction *a = menu->addAction(text);
+        a->setShortcut(keys);
+        connect(a, &QAction::triggered, this, slot);
+        return a;
+    };
+    QWebEnginePage *page = m_view->page();
+
+    QMenu *app = bar->addMenu(QStringLiteral("Task Tumbler"));
+    add(app, QStringLiteral("Settings…"), QKeySequence::Preferences, [this] {
+        raiseWindow();
+        showPage(QStringLiteral("settings"));
+    })->setMenuRole(QAction::PreferencesRole);
+    add(app, QStringLiteral("Quit Task Tumbler"), QKeySequence::Quit, [] { QCoreApplication::quit(); })->setMenuRole(QAction::QuitRole);
+
+    QMenu *file = bar->addMenu(QStringLiteral("File"));
+    add(file, QStringLiteral("New Task"), QKeySequence(Qt::CTRL | Qt::Key_N), [this] {
+        raiseWindow();
+        callPage(QStringLiteral("newTask()"));
+    });
+    add(file, QStringLiteral("New Note"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N), [this] {
+        raiseWindow();
+        callPage(QStringLiteral("newNote()"));
+    });
+    add(file, QStringLiteral("Quick Capture…"), QKeySequence(), [this] { Q_EMIT m_app->showCaptureRequested(); });
+    file->addSeparator();
+    add(file, QStringLiteral("Close Window"), QKeySequence::Close, [this] { close(); });
+
+    QMenu *edit = bar->addMenu(QStringLiteral("Edit"));
+    add(edit, QStringLiteral("Undo"), QKeySequence::Undo, [this] { callPage(QStringLiteral("undo()")); });
+    add(edit, QStringLiteral("Redo"), QKeySequence::Redo, [this] { callPage(QStringLiteral("redo()")); });
+    edit->addSeparator();
+    add(edit, QStringLiteral("Cut"), QKeySequence::Cut, [page] { page->triggerAction(QWebEnginePage::Cut); });
+    add(edit, QStringLiteral("Copy"), QKeySequence::Copy, [page] { page->triggerAction(QWebEnginePage::Copy); });
+    add(edit, QStringLiteral("Paste"), QKeySequence::Paste, [page] { page->triggerAction(QWebEnginePage::Paste); });
+    add(edit, QStringLiteral("Select All"), QKeySequence::SelectAll, [page] { page->triggerAction(QWebEnginePage::SelectAll); });
+    edit->addSeparator();
+    add(edit, QStringLiteral("Find"), QKeySequence::Find, [this] { callPage(QStringLiteral("find()")); });
+
+    QMenu *go = bar->addMenu(QStringLiteral("Go"));
+    const QList<QPair<QString, QString>> pages{{QStringLiteral("Today"), QStringLiteral("today")},
+                                               {QStringLiteral("Tasks"), QStringLiteral("tasks")},
+                                               {QStringLiteral("Schedule"), QStringLiteral("schedule")},
+                                               {QStringLiteral("Notes"), QStringLiteral("notes")}};
+    for (qsizetype i = 0; i < pages.size(); ++i) {
+        add(go, pages[i].first, QKeySequence(Qt::CTRL | (Qt::Key_1 + int(i))), [this, name = pages[i].second] {
+            raiseWindow();
+            showPage(name);
+        });
+    }
+    go->addSeparator();
+    for (const auto &[label, name] : {std::pair{QStringLiteral("Energy"), QStringLiteral("energy")}, {QStringLiteral("Stats"), QStringLiteral("stats")},
+                                      {QStringLiteral("Categories"), QStringLiteral("categories")}, {QStringLiteral("Close Out the Day"), QStringLiteral("closeout")},
+                                      {QStringLiteral("Week Review"), QStringLiteral("review")}}) {
+        add(go, label, QKeySequence(), [this, name] {
+            raiseWindow();
+            showPage(name);
+        });
+    }
+
+    QMenu *view = bar->addMenu(QStringLiteral("View"));
+    add(view, QStringLiteral("Plan My Day…"), QKeySequence(Qt::CTRL | Qt::Key_P), [this] {
+        raiseWindow();
+        callPage(QStringLiteral("openPlan()"));
+    });
+    add(view, QStringLiteral("Enter Full Screen"), QKeySequence::FullScreen, [this] { setWindowState(windowState() ^ Qt::WindowFullScreen); });
+
+    QMenu *window = bar->addMenu(QStringLiteral("Window"));
+    add(window, QStringLiteral("Minimize"), QKeySequence(Qt::CTRL | Qt::Key_M), [this] { showMinimized(); });
+    add(window, QStringLiteral("Task Tumbler"), QKeySequence(), [this] { raiseWindow(); });
 }
 
 void WebShell::raiseWindow()
@@ -175,6 +273,49 @@ void WebShell::closeEvent(QCloseEvent *event)
         return;
     }
     QMainWindow::closeEvent(event);
+}
+
+CaptureWindow::CaptureWindow(AppController *app, QWebEngineProfile *profile, const QUrl &base, bool sandboxed)
+    : QWidget(nullptr, Qt::Dialog | Qt::WindowStaysOnTopHint)
+{
+    setWindowTitle(QStringLiteral("Quick Capture"));
+    setFixedSize(600, 196);
+    auto *page = new ShellPage(profile, base.scheme() == QLatin1String(AppScheme::name) ? QUrl() : base, sandboxed, this);
+    auto *channel = new QWebChannel(this);
+    channel->registerObject(QStringLiteral("app"), app);
+    channel->registerObject(QStringLiteral("shell"), new ShellBridge(app, this, sandboxed, this));
+    page->setWebChannel(channel);
+    page->setBackgroundColor(Qt::transparent);
+    m_view = new QWebEngineView(this);
+    m_view->setPage(page);
+    m_view->setContextMenuPolicy(Qt::NoContextMenu);
+    auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->addWidget(m_view);
+    QUrl url = base;
+    url.setFragment(QStringLiteral("capture"));
+    m_view->setUrl(url);
+}
+
+CaptureWindow::~CaptureWindow()
+{
+    QWebEnginePage *page = m_view->page();
+    delete m_view;
+    delete page;
+}
+
+void CaptureWindow::open()
+{
+    // Centred a third of the way down the screen with the mouse on it.
+    if (QScreen *screen = QGuiApplication::screenAt(QCursor::pos()) ?: QGuiApplication::primaryScreen()) {
+        const QRect area = screen->availableGeometry();
+        move(area.x() + (area.width() - width()) / 2, area.y() + area.height() / 3 - height() / 2);
+    }
+    show();
+    raise();
+    activateWindow();
+    m_view->setFocus();
+    m_view->page()->runJavaScript(QStringLiteral("window.tumbler && window.tumbler.resetCapture && window.tumbler.resetCapture()"));
 }
 
 } // namespace tumbler
