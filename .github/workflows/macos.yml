@@ -63,15 +63,29 @@ jobs:
           QT_QPA_PLATFORM: cocoa
         run: |
           mkdir -p shots
-          for page in today tasks schedule settings closeout; do
-            TUMBLER_SCREENSHOT="$PWD/shots/$page.png" TUMBLER_PAGE="$page" TUMBLER_SHOT_SIZE=1100x800 \
-              "dist/Task Tumbler.app/Contents/MacOS/task-tumbler" --db "$RUNNER_TEMP/shots.db" > "shots/$page.log" 2>&1 &
-            pid=$!
+          APP="dist/Task Tumbler.app/Contents/MacOS/task-tumbler"
+          DB="$RUNNER_TEMP/shots.db"
+          shot() { # name page [args...]
+            local name="$1" page="$2"
+            shift 2
+            TUMBLER_SCREENSHOT="$PWD/shots/$name.png" TUMBLER_PAGE="$page" TUMBLER_SHOT_SIZE=1100x800 \
+              "$APP" --db "$DB" "$@" > "shots/$name.log" 2>&1 &
+            local pid=$!
             for _ in $(seq 1 60); do kill -0 "$pid" 2>/dev/null || break; sleep 0.5; done
             kill "$pid" 2>/dev/null || true
-            wait "$pid" || echo "$page: exit $?"
-            test -s "shots/$page.png" || { echo "no screenshot of $page"; cat "shots/$page.log"; exit 1; }
-          done
+            wait "$pid" || echo "$name: exit $?"
+            test -s "shots/$name.png" || { echo "no screenshot of $name"; cat "shots/$name.log"; exit 1; }
+          }
+          # Something on the cards: tasks ready to start, and a routine.
+          shot seed1 today --add "Draft the quarterly report ~45m !high #work"
+          shot seed2 today --add "Renew passport ~20m"
+          shot seed3 today --add "Water the plants daily"
+          rm -f shots/seed*
+          for page in today tasks schedule settings closeout; do shot "$page" "$page"; done
+          # And the same in dark mode.
+          defaults write -g AppleInterfaceStyle Dark
+          for page in today settings; do shot "$page-dark" "$page"; done
+          defaults delete -g AppleInterfaceStyle
 
       - name: Upload app
         uses: actions/upload-artifact@v4

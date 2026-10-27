@@ -25,6 +25,12 @@ cp -R "$BUILD/src/app/task-tumbler.app" "$APP"
     -libpath="$(brew --prefix)/lib" \
     -verbose=1
 
+# Mac colours for Kirigami: it reads styles/<style>/Theme.qml from beside its
+# own QML, and has none for the macOS style (see the file).
+THEME_DIR="$APP/Contents/Resources/qml/org/kde/kirigami/styles/macOS"
+mkdir -p "$THEME_DIR"
+cp "$SRC/resources/macos/kirigami/Theme.qml" "$THEME_DIR/Theme.qml"
+
 # macdeployqt misses some paths, e.g. in Homebrew's read-only dylibs: point
 # anything still aimed at Homebrew or the KDE prefix at the bundled copy.
 FRAMEWORKS="$APP/Contents/Frameworks"
