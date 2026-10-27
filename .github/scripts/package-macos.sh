@@ -39,8 +39,15 @@ framework_re='^(.*/)?([^/]+\.framework)/(.+)$'
 # co.) aren't executable and have no .dylib suffix.
 machos() {
     find "$APP" -type f -print0 | while IFS= read -r -d '' f; do
-        file "$f" | grep -q 'Mach-O' && printf '%s\0' "$f"
+        if file "$f" | grep -q 'Mach-O'; then printf '%s\0' "$f"; fi
     done
+}
+
+# install_name_tool, quiet about the signatures it breaks (all re-signed
+# below) but not about failing.
+nametool() {
+    local out
+    out="$(install_name_tool "$@" 2>&1)" || { echo "install_name_tool $*: $out" >&2; return 1; }
 }
 
 # The @rpath name for a dependency outside the bundle, copying it in first
@@ -74,9 +81,9 @@ relink() {
     id="$(otool -D "$bin" | tail -n +2)"
     if [[ "$id" =~ $outside ]]; then
         to="$(bundled "$id")"
-        [ -n "$to" ] && install_name_tool -id "$to" "$bin" 2>/dev/null
+        [ -n "$to" ] && nametool -id "$to" "$bin"
     elif [[ "$id" =~ $in_bundle ]]; then
-        install_name_tool -id "@rpath/${BASH_REMATCH[1]}" "$bin" 2>/dev/null
+        nametool -id "@rpath/${BASH_REMATCH[1]}" "$bin"
     fi
     otool -L "$bin" | tail -n +2 | awk '{print $1}' | while read -r dep; do
         to=""
@@ -86,7 +93,7 @@ relink() {
         elif [[ "$dep" =~ $in_bundle ]]; then
             to="@rpath/${BASH_REMATCH[1]}"
         fi
-        [ -n "$to" ] && install_name_tool -change "$dep" "$to" "$bin" 2>/dev/null
+        [ -n "$to" ] && nametool -change "$dep" "$to" "$bin"
         true
     done
 }
@@ -101,7 +108,9 @@ while :; do
 done
 
 add_rpath() {
-    otool -l "$1" | grep -A2 LC_RPATH | grep -qF "path $2 " || install_name_tool -add_rpath "$2" "$1"
+    local load
+    load="$(otool -l "$1")"
+    case "$load" in *"path $2 "*) ;; *) nametool -add_rpath "$2" "$1" ;; esac
 }
 add_rpath "$MAIN" "@executable_path/../Frameworks"
 # Helper: .../Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/MacOS
