@@ -35,8 +35,10 @@ outside="^($(brew --prefix)|$KDE)/"
 in_bundle='^@executable_path/\.\./Frameworks/(.+)$'
 framework_re='^(.*/)?([^/]+\.framework)/(.+)$'
 
+# Every Mach-O file, by content: Homebrew's framework binaries (QtCore and
+# co.) aren't executable and have no .dylib suffix.
 machos() {
-    find "$APP" -type f \( -perm -u+x -o -name '*.dylib' \) -print0 | while IFS= read -r -d '' f; do
+    find "$APP" -type f -print0 | while IFS= read -r -d '' f; do
         file "$f" | grep -q 'Mach-O' && printf '%s\0' "$f"
     done
 }
@@ -105,11 +107,13 @@ add_rpath "$MAIN" "@executable_path/../Frameworks"
 # Helper: .../Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/MacOS
 add_rpath "$HELPER" "@executable_path/../../../../../../.."
 
-# Nothing may still point outside the bundle: on another Mac those paths don't exist.
-leaks="$(find "$APP" -type f \( -perm -u+x -o -name '*.dylib' \) -print0 \
-    | xargs -0 otool -L 2>/dev/null | grep -E "$(brew --prefix)|$KDE" | grep -v ':$' || true)"
+# Nothing may still point outside the bundle (on another Mac those paths
+# don't exist), nor at @executable_path/../Frameworks, which the WebEngine
+# helper can't resolve: it's an executable of its own.
+leaks="$(machos | xargs -0 otool -L 2>/dev/null \
+    | grep -E "$(brew --prefix)|$KDE|@executable_path/\.\./Frameworks" | grep -v ':$' || true)"
 if [ -n "$leaks" ]; then
-    echo "These still link outside the bundle:" >&2
+    echo "These would fail to load on another Mac:" >&2
     echo "$leaks" >&2
     exit 1
 fi
