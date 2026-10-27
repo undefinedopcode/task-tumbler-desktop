@@ -22,9 +22,9 @@ jobs:
         id: key
         run: echo "qt=$(brew list --versions qt | tr ' ' '-')" >> "$GITHUB_OUTPUT"
 
-      - name: Cache KDE libraries
+      - name: Restore KDE libraries
         id: cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/kde-deps
           key: kde-deps-${{ steps.key.outputs.qt }}-${{ hashFiles('.github/scripts/build-kde-deps.sh') }}
@@ -32,6 +32,14 @@ jobs:
       - name: Build KDE libraries
         if: steps.cache.outputs.cache-hit != 'true'
         run: .github/scripts/build-kde-deps.sh "$HOME/kde-deps"
+
+      # Saved straight away, so a failure further on doesn't mean building them again.
+      - name: Save KDE libraries
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/kde-deps
+          key: ${{ steps.cache.outputs.cache-primary-key }}
 
       - name: Configure
         run: |

@@ -164,11 +164,11 @@ private slots:
         backend.answers = {{"Stats", "{}"}};
         Server server(&backend);
         server.handle(request("tools/call", {{"name", "get_stats"}, {"arguments", QJsonObject{}}}));
-        QCOMPARE(backend.calls.last(), qMakePair(QStringLiteral("Stats"), QVariantList({7})));
+        QCOMPARE(backend.calls.last(), qMakePair(QStringLiteral("Stats"), QVariantList{QVariant(7)}));
         server.handle(request("tools/call", {{"name", "get_stats"}, {"arguments", QJsonObject{{"days", 0}}}}));
-        QCOMPARE(backend.calls.last().second, QVariantList({0}));
+        QCOMPARE(backend.calls.last().second, QVariantList{QVariant(0)});
         server.handle(request("tools/call", {{"name", "get_stats"}, {"arguments", QJsonObject{{"days", -3}}}}));
-        QCOMPARE(backend.calls.last().second, QVariantList({0}));
+        QCOMPARE(backend.calls.last().second, QVariantList{QVariant(0)});
     }
 
     void closeOutToolsMapToTheApi()
