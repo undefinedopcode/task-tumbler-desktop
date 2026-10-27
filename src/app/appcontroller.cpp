@@ -243,6 +243,8 @@ void AppController::refresh(const QSet<QString> &tables)
             {QStringLiteral("externalWrites"), q.setting(QStringLiteral("external_writes"), true).toBool()},
             {QStringLiteral("krunner"), q.setting(QStringLiteral("krunner"), false).toBool()},
             {QStringLiteral("remoteNotify"), q.setting(QStringLiteral("remote_notify"), QStringLiteral("away")).toString()},
+            // "system" | "light" | "dark" (the web UI's shell applies it)
+            {QStringLiteral("appearance"), q.setting(QStringLiteral("appearance"), QStringLiteral("system")).toString()},
         };
         Q_EMIT settingsChanged();
         Q_EMIT onboardingChanged();

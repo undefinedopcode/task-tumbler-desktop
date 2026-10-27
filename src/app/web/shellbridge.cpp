@@ -1,6 +1,9 @@
 #include "shellbridge.h"
 
+#include "appcontroller.h"
+
 #include <QApplication>
+#include <QDesktopServices>
 #include <QFileDialog>
 #include <QPalette>
 #include <QStyleHints>
@@ -9,20 +12,33 @@
 
 namespace tumbler {
 
-ShellBridge::ShellBridge(QWidget *window, bool sandboxed, QObject *parent)
+ShellBridge::ShellBridge(AppController *app, QWidget *window, bool sandboxed, QObject *parent)
     : QObject(parent)
+    , m_app(app)
     , m_window(window)
     , m_sandboxed(sandboxed)
 {
     connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, this, &ShellBridge::colorSchemeChanged);
-    // TUMBLER_COLOR_SCHEME=dark|light overrides the system (screenshots).
-    // Not every platform takes the request (offscreen doesn't), so it's also
-    // answered here.
-    const QString forced = qEnvironmentVariable("TUMBLER_COLOR_SCHEME");
-    if (forced == QLatin1String("dark") || forced == QLatin1String("light")) {
-        m_forced = forced;
-        QGuiApplication::styleHints()->setColorScheme(forced == QLatin1String("dark") ? Qt::ColorScheme::Dark : Qt::ColorScheme::Light);
-    }
+    // Settings → Appearance (or TUMBLER_COLOR_SCHEME=dark|light, for
+    // screenshots) overrides the system. Not every platform takes the request
+    // (offscreen doesn't), so colorScheme() answers it too.
+    connect(app, &AppController::settingsChanged, this, &ShellBridge::applyAppearance);
+    applyAppearance();
+}
+
+void ShellBridge::applyAppearance()
+{
+    QString wanted = qEnvironmentVariable("TUMBLER_COLOR_SCHEME");
+    if (wanted != QLatin1String("dark") && wanted != QLatin1String("light"))
+        wanted = m_app->settings().value(QStringLiteral("appearance")).toString();
+    const QString forced = wanted == QLatin1String("dark") || wanted == QLatin1String("light") ? wanted : QString();
+    if (forced == m_forced)
+        return;
+    m_forced = forced;
+    QGuiApplication::styleHints()->setColorScheme(forced == QLatin1String("dark")    ? Qt::ColorScheme::Dark
+                                                  : forced == QLatin1String("light") ? Qt::ColorScheme::Light
+                                                                                     : Qt::ColorScheme::Unknown);
+    Q_EMIT colorSchemeChanged();
 }
 
 QString ShellBridge::platform() const
@@ -76,6 +92,19 @@ QString ShellBridge::chooseOpenFile(const QString &title, const QString &filter)
 {
     const QUrl url = QFileDialog::getOpenFileUrl(m_window, title, QUrl(), filter);
     return url.isEmpty() ? QString() : url.toString();
+}
+
+void ShellBridge::openExternal(const QString &url)
+{
+    const QUrl u(url);
+    static const QStringList allowed{QStringLiteral("http"), QStringLiteral("https"), QStringLiteral("mailto"),
+                                     QStringLiteral("x-apple.systempreferences")};
+    if (!allowed.contains(u.scheme()))
+        return;
+    if (m_sandboxed)
+        qInfo("Would open %s", qPrintable(url));
+    else
+        QDesktopServices::openUrl(u);
 }
 
 } // namespace tumbler

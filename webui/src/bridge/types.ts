@@ -259,3 +259,60 @@ export interface NoteDetail {
   taskTitle: string
   updatedAt: number
 }
+
+export interface AiSettings extends AiState {
+  hasKey?: boolean
+  model?: string
+  ollamaUrl?: string
+  ollamaModel?: string
+  shareNotes?: boolean
+  local?: boolean
+}
+
+export interface Feed {
+  id: string
+  name: string
+  url: string
+  color: string
+  enabled: boolean
+  error?: string
+  lastSync?: number
+  count?: number
+  device?: boolean
+}
+
+export interface SyncState {
+  syncing?: boolean
+  feeds?: Feed[]
+  linear?: {
+    enabled?: boolean
+    user?: string
+    error?: string
+    lastSync?: number
+    summary?: string
+    teams?: { key: string; name: string }[]
+    teamKeys?: string[]
+    includeBacklog?: boolean
+  }
+}
+
+export interface DeviceCalendars {
+  supported: boolean
+  access: 'granted' | 'notAsked' | 'denied'
+  calendars: { id: string; title: string; account: string; color: string; feedId: string }[]
+}
+
+export interface RemoteState {
+  enabled?: boolean
+  running?: boolean
+  error?: string
+  listen?: string
+  publicUrl?: string
+  pairUrl?: string
+  secure?: boolean
+  phones?: { endpoint: string; label: string; addedAt: number }[]
+  streams?: number
+  serveCommand?: string
+  notify?: string
+  tailscaleName?: string
+}

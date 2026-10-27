@@ -114,7 +114,7 @@ WebShell::WebShell(AppController *app, QObject *sync, QObject *remote, const Opt
     page->settings()->setAttribute(QWebEngineSettings::FocusOnNavigationEnabled, true);
     page->settings()->setAttribute(QWebEngineSettings::ShowScrollBars, true);
 
-    m_bridge = new ShellBridge(this, options.sandboxed, this);
+    m_bridge = new ShellBridge(app, this, options.sandboxed, this);
     m_channel = new QWebChannel(this);
     m_channel->registerObject(QStringLiteral("app"), app);
     m_channel->registerObject(QStringLiteral("shell"), m_bridge);

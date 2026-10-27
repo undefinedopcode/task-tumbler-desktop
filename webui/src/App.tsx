@@ -13,6 +13,7 @@ import { isMod, usePlatform } from './lib/platform'
 import { Placeholder } from './pages/Placeholder'
 import { NotesPage } from './pages/NotesPage'
 import { SchedulePage } from './pages/SchedulePage'
+import { SettingsPage } from './pages/SettingsPage'
 import { TasksPage } from './pages/TasksPage'
 import { TodayPage } from './pages/TodayPage'
 
@@ -99,6 +100,8 @@ export function App() {
               <SchedulePage />
             ) : page === 'notes' ? (
               <NotesPage noteId={openNote} onSelect={setOpenNote} />
+            ) : page === 'settings' ? (
+              <SettingsPage />
             ) : (
               <Placeholder title={pageTitles[page]} />
             )}

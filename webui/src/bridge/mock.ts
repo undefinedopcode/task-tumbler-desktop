@@ -387,5 +387,43 @@ export function createMock(): Objects {
   if (params.get('platform')) shell.platform = params.get('platform')
   if (params.get('scheme')) shell.colorScheme = params.get('scheme')
 
-  return { app, shell }
+  // Settings: sync and the phone companion, enough to draw them.
+  const sync: any = {
+    state: { syncing: false, feeds: [{ id: 'f1', name: 'Work', url: 'https://example.com/work.ics', color: '#0ea5e9', enabled: true, lastSync: Date.now(), count: 42 }], linear: { enabled: false } },
+    stateChanged: signal(),
+    feedAdded: signal(),
+    feedFailed: signal(),
+    deviceCalendarsChanged: signal(),
+    deviceCalendars: (cb: any) => reply(cb, { supported: shell.platform === 'mac', access: 'notAsked', calendars: [] }),
+  }
+  const remote: any = {
+    state: {
+      enabled: true,
+      running: true,
+      listen: '127.0.0.1:7789',
+      publicUrl: 'https://desk.example-tailnet.ts.net:7789',
+      pairUrl: 'https://desk.example-tailnet.ts.net:7789/#pair=0123456789abcdef0123456789abcdef',
+      secure: true,
+      phones: [{ endpoint: 'e1', label: 'Pixel 8', addedAt: Date.now() }],
+      streams: 1,
+      serveCommand: 'tailscale serve --bg --https=7789 http://127.0.0.1:7789',
+      notify: 'away',
+    },
+    stateChanged: signal(),
+  }
+  app.ollamaModels = []
+  app.ollamaModelsChanged = signal()
+  app.dataPath = '/home/you/.local/share/task-tumbler/tasks.db'
+  app.setSetting = (key: string, value: unknown, cb: any) => {
+    const map: Record<string, string> = { appearance: 'appearance', close_to_tray: 'closeToTray', autostart: 'autostart', notifications: 'notifications' }
+    app.settings = { ...app.settings, [map[key] ?? key]: value }
+    app.settingsChanged.emit()
+    if (key === 'appearance') {
+      shell.colorScheme = value === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : value
+      shell.colorSchemeChanged.emit()
+    }
+    reply(cb, true)
+  }
+
+  return { app, shell, sync, remote }
 }
