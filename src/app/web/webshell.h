@@ -41,6 +41,7 @@ Q_SIGNALS:
 
 protected:
     void closeEvent(QCloseEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     // The macOS menu bar (elsewhere the UI has its own navigation).

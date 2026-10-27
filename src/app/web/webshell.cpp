@@ -5,7 +5,7 @@
 #include "shellbridge.h"
 
 #include <QCloseEvent>
-#include <QGuiApplication>
+#include <QApplication>
 #include <QKeySequence>
 #include <QMenuBar>
 #include <QScreen>
@@ -149,6 +149,9 @@ WebShell::WebShell(AppController *app, QObject *sync, QObject *remote, const Opt
 
     m_capture = new CaptureWindow(app, profile, base, options.sandboxed);
     connect(app, &AppController::showCaptureRequested, m_capture, &CaptureWindow::open);
+    // On macOS a quit (menu, Dock, tray, logout) stalls while quick capture
+    // is open, so it goes first.
+    qApp->installEventFilter(this);
 
 #ifdef Q_OS_MACOS
     buildMenuBar();
@@ -157,7 +160,9 @@ WebShell::WebShell(AppController *app, QObject *sync, QObject *remote, const Opt
 
 WebShell::~WebShell()
 {
+    qApp->removeEventFilter(this);
     delete m_capture; // its page shares this window's profile
+    m_capture = nullptr;
     // The view before its page, and the page before its profile: as plain
     // children they'd go in the order they were made, profile first.
     QWebEnginePage *page = m_view->page();
@@ -273,6 +278,13 @@ void WebShell::closeEvent(QCloseEvent *event)
         return;
     }
     QMainWindow::closeEvent(event);
+}
+
+bool WebShell::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == qApp && event->type() == QEvent::Quit && m_capture)
+        m_capture->hide();
+    return QMainWindow::eventFilter(watched, event);
 }
 
 CaptureWindow::CaptureWindow(AppController *app, QWebEngineProfile *profile, const QUrl &base, bool sandboxed)
