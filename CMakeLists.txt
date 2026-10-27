@@ -47,8 +47,11 @@ if(BUILD_APP)
         set(TUMBLER_PLATFORM_SOURCES ${TUMBLER_CONTROLLER_PLATFORM_SOURCES}
             ${APP_DESKTOP}/presence_mac.cpp ${APP_DESKTOP}/hotkey_mac.cpp
             ${APP_DESKTOP}/idlewatch_mac.cpp ${APP_DESKTOP}/autostart_mac.cpp)
+        # QtSvg isn't called directly: linking it makes macdeployqt bundle the
+        # SVG plugins, without which the menu bar icon (an SVG) is blank.
+        find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Svg)
         set(TUMBLER_PLATFORM_LIBRARIES "-framework Carbon" "-framework CoreGraphics" "-framework CoreFoundation"
-            "-framework EventKit" "-framework AppKit")
+            "-framework EventKit" "-framework AppKit" Qt6::Svg)
         set(TUMBLER_PLATFORM_DEFINITIONS "")
     else()
         # Plus the session bus: scripts, KRunner and Do Not Disturb.

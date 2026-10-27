@@ -23,6 +23,11 @@ cp -R "$BUILD/src/app/task-tumbler.app" "$APP"
     -libpath="$(brew --prefix)/lib" \
     -verbose=1
 
+# The menu bar icon is an SVG.
+for plugin in imageformats/libqsvg.dylib iconengines/libqsvgicon.dylib; do
+    [ -e "$APP/Contents/PlugIns/$plugin" ] || { echo "macdeployqt left out $plugin" >&2; exit 1; }
+done
+
 # macdeployqt misses some paths: Homebrew's read-only dylibs, and the
 # WebEngine helper, whose Qt frameworks it links by absolute Homebrew path
 # (some of them, like QtQuick, the app itself doesn't use). Copy in what's
