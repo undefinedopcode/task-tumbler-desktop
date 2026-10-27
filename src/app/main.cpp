@@ -21,6 +21,9 @@
 #include <KAboutData>
 #ifdef Q_OS_MACOS
 #include <KIconTheme>
+#include <QStyleHints>
+#include <QtQml/qqmlextensionplugin.h>
+Q_IMPORT_QML_PLUGIN(org_kde_tasktumbler_macstylePlugin)
 #endif
 #include <KLocalizedQmlContext>
 #include <KLocalizedString>
@@ -62,6 +65,7 @@ int runMcp(int argc, char *argv[])
     tumbler::mcp::Server server(&backend);
     return tumbler::mcp::runStdio(server);
 }
+
 #ifdef Q_OS_MACOS
 // KNotifications looks for tasktumbler.notifyrc in the data locations, and
 // on macOS those don't include the app bundle. Keep a copy in Application
@@ -81,6 +85,19 @@ void installNotifyConfig()
     if (installed.open(QIODevice::WriteOnly | QIODevice::Truncate))
         installed.write(config);
 }
+
+// KIconTheme::initTheme() also starts KColorSchemeManager, which away from
+// Plasma swaps the system palette for Breeze or Breeze Dark. It stands back
+// when a platform theme has claimed the colour scheme, but clears the claim
+// whenever the system appearance changes, so claim it again just before (this
+// connection is made first, so it runs first). The Mac's own palette stays,
+// light or dark, with the user's accent colour.
+void keepMacPalette(QApplication &app)
+{
+    const auto claim = [&app] { app.setProperty("KDE_COLOR_SCHEME_PATH", QStringLiteral("macos-system")); };
+    claim();
+    QObject::connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, &app, claim);
+}
 #endif
 } // namespace
 
@@ -98,7 +115,8 @@ int main(int argc, char *argv[])
 #endif
 
 #ifdef Q_OS_MACOS
-    // No system icon theme on a Mac: use the Breeze icons built into KIconThemes.
+    // No icon theme on a Mac: Breeze's are built in, and KIconTheme's engine
+    // (bundled in PlugIns/kiconthemes6) recolours them to suit light or dark.
     KIconTheme::initTheme();
 #endif
 
@@ -106,6 +124,7 @@ int main(int argc, char *argv[])
     KLocalizedString::setApplicationDomain("tasktumbler");
 #ifdef Q_OS_MACOS
     installNotifyConfig();
+    keepMacPalette(app);
 #endif
 
     KAboutData about(QStringLiteral("tasktumbler"), i18n("Task Tumbler"), QStringLiteral("0.1.0"),
@@ -116,12 +135,12 @@ int main(int argc, char *argv[])
     QApplication::setWindowIcon(
         QIcon::fromTheme(QStringLiteral("org.kde.tasktumbler"), QIcon(QStringLiteral(":/icons/org.kde.tasktumbler.svg"))));
 
-    // Plasma's own look, or the Mac's. Named on macOS too, although it's Qt's
-    // default there: Kirigami picks its colours (styles/macOS/Theme.qml) by
-    // the style's name, and an unnamed default has none.
+    // Plasma's own look, or the Mac's: Qt's macOS style plus a proper tool
+    // button (src/app/macstyle). Kirigami also picks its colours by the
+    // style's name (styles/<name>/Theme.qml, see package-macos.sh).
     if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
 #ifdef Q_OS_MACOS
-        QQuickStyle::setStyle(QStringLiteral("macOS"));
+        QQuickStyle::setStyle(QStringLiteral("org.kde.tasktumbler.macstyle"));
 #else
         QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
 #endif

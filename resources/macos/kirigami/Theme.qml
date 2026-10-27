@@ -1,7 +1,8 @@
 /*
  * Kirigami's colours on macOS. Kirigami looks for styles/<Qt Quick Controls
- * style>/Theme.qml beside its QML files, and ships none for "macOS", so it
- * falls back to Breeze's. package-macos.sh puts this one there instead: the
+ * style>/Theme.qml beside its QML files, and ships none for ours
+ * (org.kde.tasktumbler.macstyle, Qt's macOS style underneath), so it would
+ * fall back to Breeze's. package-macos.sh puts this one there instead: the
  * system's own palette (light or dark, following the system) with the
  * user's accent colour, and Apple's system colours for good, bad and
  * attention.

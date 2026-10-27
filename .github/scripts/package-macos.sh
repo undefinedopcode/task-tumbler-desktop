@@ -16,9 +16,21 @@ APP="$OUT/Task Tumbler.app"
 rm -rf "$APP"
 cp -R "$BUILD/src/app/task-tumbler.app" "$APP"
 
+# KIconThemes' icon engine, which recolours the Breeze icons for light or dark.
+# KIconTheme::initTheme() looks for it in <plugins>/kiconthemes6.
+ENGINE="$(find "$KDE/lib" -name 'KIconEnginePlugin.*' -path '*iconengines*' | head -1)"
+if [ -z "$ENGINE" ]; then
+    echo "KIconThemes' icon engine plugin isn't in $KDE" >&2
+    exit 1
+fi
+mkdir -p "$APP/Contents/PlugIns/kiconthemes6/iconengines"
+cp "$ENGINE" "$APP/Contents/PlugIns/kiconthemes6/iconengines/"
+ENGINE_IN_APP="$APP/Contents/PlugIns/kiconthemes6/iconengines/$(basename "$ENGINE")"
+
 # QML modules the app imports, found by scanning its QML; libraries from Qt,
-# the KDE prefix and Homebrew.
+# the KDE prefix and Homebrew, for the app and the icon engine.
 "$QT/bin/macdeployqt" "$APP" \
+    -executable="$ENGINE_IN_APP" \
     -qmldir="$SRC/src/app/qml" \
     -qmlimport="$KDE/lib/qml" \
     -libpath="$KDE/lib" \
@@ -26,8 +38,8 @@ cp -R "$BUILD/src/app/task-tumbler.app" "$APP"
     -verbose=1
 
 # Mac colours for Kirigami: it reads styles/<style>/Theme.qml from beside its
-# own QML, and has none for the macOS style (see the file).
-THEME_DIR="$APP/Contents/Resources/qml/org/kde/kirigami/styles/macOS"
+# own QML, and has none for ours (see the file).
+THEME_DIR="$APP/Contents/Resources/qml/org/kde/kirigami/styles/org.kde.tasktumbler.macstyle"
 mkdir -p "$THEME_DIR"
 cp "$SRC/resources/macos/kirigami/Theme.qml" "$THEME_DIR/Theme.qml"
 

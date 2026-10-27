@@ -88,6 +88,9 @@ configure_file(${PROJECT_SOURCE_DIR}/resources/desktop/tasktumbler.notifyrc
 target_compile_definitions(task-tumbler PRIVATE TUMBLER_DEV_DATA_DIR="${CMAKE_BINARY_DIR}/share")
 
 if(APPLE)
+    add_subdirectory(macstyle)
+    target_link_libraries(task-tumbler PRIVATE tumbler-macstyleplugin)
+
     # A proper .app: Info.plist, the icon (an .icns made from the PNGs by
     # iconutil), and the notification config, which main.cpp hands to
     # KNotifications. .github/scripts/package-macos.sh bundles the libraries.

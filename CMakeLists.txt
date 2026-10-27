@@ -48,7 +48,7 @@ if(BUILD_APP)
         set(TUMBLER_PLATFORM_SOURCES ${TUMBLER_CONTROLLER_PLATFORM_SOURCES}
             ${APP_DESKTOP}/presence_mac.cpp ${APP_DESKTOP}/hotkey_mac.cpp
             ${APP_DESKTOP}/idlewatch_mac.cpp ${APP_DESKTOP}/autostart_mac.cpp)
-        # KIconThemes brings the Breeze icons along, built in.
+        # The Breeze icons, built into KIconThemes, recoloured by its icon engine.
         find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS IconThemes)
         set(TUMBLER_PLATFORM_LIBRARIES KF6::IconThemes "-framework Carbon" "-framework CoreGraphics" "-framework CoreFoundation"
             "-framework EventKit" "-framework AppKit")
