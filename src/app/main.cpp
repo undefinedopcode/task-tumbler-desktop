@@ -134,7 +134,7 @@ int main(int argc, char *argv[])
     const QCommandLineOption hiddenOption(QStringLiteral("hidden"), i18n("Start in the system tray."));
     const QCommandLineOption addOption(QStringLiteral("add"), i18n("Capture a task (quick-capture syntax) and exit."), QStringLiteral("text"));
     const QCommandLineOption mcpOption(QStringLiteral("mcp"), i18n("Serve the Model Context Protocol on stdin/stdout for AI agents."));
-    const QCommandLineOption dbOption(QStringLiteral("db"), i18n("Use this database file (for testing: no login item, KRunner plugin, global shortcut or D-Bus name)."), QStringLiteral("path"));
+    const QCommandLineOption dbOption(QStringLiteral("db"), i18n("Use this database file (for testing: no login item, KRunner plugin or D-Bus name)."), QStringLiteral("path"));
     parser.addOption(captureOption);
     parser.addOption(hiddenOption);
     parser.addOption(dbOption);
@@ -237,15 +237,15 @@ int main(int argc, char *argv[])
     }
 #endif
 
-    // The session-wide things (the global shortcut, the login item and the
-    // KRunner plugin) belong to the real instance only: a --db instance is for
-    // testing, and its settings mustn't rewrite the user's desktop.
+    // The login item and the KRunner plugin belong to the real instance only:
+    // a --db instance's settings mustn't rewrite the user's desktop files.
     const bool ownsSession = dbArg.isEmpty() && !sandboxed;
 
-    // Global quick-capture hotkey.
+    // Global quick-capture hotkey. Registering it changes nothing on disk
+    // and keeps a binding the user chose, so a --db instance gets it too.
     QAction captureAction(i18n("Quick Capture"));
     captureAction.setObjectName(QStringLiteral("quick_capture"));
-    if (ownsSession)
+    if (!sandboxed)
         registerGlobalShortcut(&captureAction);
     QObject::connect(&captureAction, &QAction::triggered, &controller, &AppController::showCaptureRequested);
 
