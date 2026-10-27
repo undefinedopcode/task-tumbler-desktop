@@ -76,12 +76,14 @@ Kirigami.ScrollablePage {
                         }
                     }
                     Controls.ToolButton {
+                        flat: true
                         icon.name: "document-edit"
                         text: i18n("Edit")
                         display: Controls.AbstractButton.IconOnly
                         onClicked: categoryDialog.edit(card.modelData)
                     }
                     Controls.ToolButton {
+                        flat: true
                         visible: !card.modelData.isDefault
                         icon.name: "edit-delete"
                         text: i18n("Delete")

@@ -77,6 +77,7 @@ Kirigami.AbstractCard {
             }
             Item { Layout.fillWidth: true }
             Controls.ToolButton {
+                flat: true
                 icon.name: "checkmark"
                 display: Controls.AbstractButton.IconOnly
                 text: i18n("Done")

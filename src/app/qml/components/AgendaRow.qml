@@ -112,6 +112,7 @@ Controls.ItemDelegate {
 
         // Actions: one obvious primary button, the rest one click away.
         Controls.ToolButton {
+            flat: true
             visible: row.isSchedule && !row.finished && !row.item.working
             icon.name: "media-playback-start"
             text: i18n("Start")
@@ -122,6 +123,7 @@ Controls.ItemDelegate {
             Controls.ToolTip.delay: Kirigami.Units.toolTipDelay
         }
         Controls.ToolButton {
+            flat: true
             visible: (row.isSchedule || row.isOccurrence) && !row.finished
             icon.name: "checkmark"
             text: i18n("Done")
@@ -133,6 +135,7 @@ Controls.ItemDelegate {
             Controls.ToolTip.delay: Kirigami.Units.toolTipDelay
         }
         Controls.ToolButton {
+            flat: true
             visible: row.isSchedule && row.item.state === "overdue"
             icon.name: "go-next"
             text: i18n("Later")
@@ -142,6 +145,7 @@ Controls.ItemDelegate {
             Controls.ToolTip.delay: Kirigami.Units.toolTipDelay
         }
         Controls.ToolButton {
+            flat: true
             visible: row.isOccurrence && row.finished
             icon.name: "edit-undo"
             text: i18n("Undo")
@@ -149,6 +153,7 @@ Controls.ItemDelegate {
             onClicked: AppController.setOccurrence(row.item.id, "pending")
         }
         Controls.ToolButton {
+            flat: true
             visible: !row.isEvent && !row.finished
             icon.name: "overflow-menu"
             display: Controls.AbstractButton.IconOnly

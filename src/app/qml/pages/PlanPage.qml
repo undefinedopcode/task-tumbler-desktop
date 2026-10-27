@@ -52,6 +52,7 @@ Kirigami.ScrollablePage {
             spacing: Kirigami.Units.largeSpacing
             Controls.ButtonGroup { id: dayGroup }
             Controls.ToolButton {
+                flat: true
                 text: i18n("Today")
                 checkable: true
                 checked: page.isToday
@@ -59,6 +60,7 @@ Kirigami.ScrollablePage {
                 onClicked: { page.day = Format.isoDate(new Date()); page.make() }
             }
             Controls.ToolButton {
+                flat: true
                 text: i18n("Tomorrow")
                 checkable: true
                 checked: !page.isToday
@@ -79,6 +81,7 @@ Kirigami.ScrollablePage {
                 onToggled: { page.useAi = checked; page.make() }
             }
             Controls.ToolButton {
+                flat: true
                 icon.name: "view-refresh"
                 text: i18n("Plan again")
                 enabled: !page.waiting

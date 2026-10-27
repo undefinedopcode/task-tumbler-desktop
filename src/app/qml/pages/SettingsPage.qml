@@ -192,6 +192,7 @@ FormCard.FormCardPage {
                     color: modelData.color
                 }
                 trailing: Controls.ToolButton {
+                    flat: true
                     icon.name: "list-remove"
                     text: i18n("Unsubscribe")
                     display: Controls.AbstractButton.IconOnly
@@ -322,6 +323,7 @@ FormCard.FormCardPage {
                 text: modelData.label
                 description: i18n("Gets notifications")
                 trailing: Controls.ToolButton {
+                    flat: true
                     icon.name: "list-remove"
                     text: i18n("Forget")
                     display: Controls.AbstractButton.IconOnly

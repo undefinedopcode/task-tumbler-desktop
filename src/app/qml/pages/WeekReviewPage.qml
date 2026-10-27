@@ -223,6 +223,7 @@ FormCard.FormCardPage {
                     }
                 }
                 Controls.ToolButton {
+                    flat: true
                     icon.name: "view-calendar-day"
                     text: i18n("Next free slot")
                     display: page.width > Kirigami.Units.gridUnit * 30 ? Controls.AbstractButton.TextBesideIcon : Controls.AbstractButton.IconOnly
@@ -231,6 +232,7 @@ FormCard.FormCardPage {
                     onClicked: AppController.scheduleNextSlot(row.modelData.taskId)
                 }
                 Controls.ToolButton {
+                    flat: true
                     visible: row.canLetGo
                     icon.name: "edit-delete-remove"
                     text: i18n("Let it go")

@@ -61,6 +61,7 @@ jobs:
       - name: Screenshots
         env:
           QT_QPA_PLATFORM: cocoa
+          QT_LOGGING_RULES: kf.kirigami.platform.debug=true
         run: |
           mkdir -p shots
           APP="dist/Task Tumbler.app/Contents/MacOS/task-tumbler"
@@ -83,9 +84,10 @@ jobs:
           rm -f shots/seed*
           for page in today tasks schedule settings closeout; do shot "$page" "$page"; done
           # And the same in dark mode.
-          defaults write -g AppleInterfaceStyle Dark
+          osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to true' \
+            || defaults write -g AppleInterfaceStyle Dark
           for page in today settings; do shot "$page-dark" "$page"; done
-          defaults delete -g AppleInterfaceStyle
+          osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to false' || true
 
       - name: Upload app
         uses: actions/upload-artifact@v4

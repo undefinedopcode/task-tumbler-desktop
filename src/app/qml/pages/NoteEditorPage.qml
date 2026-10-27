@@ -166,6 +166,7 @@ Kirigami.Page {
                     }
                 }
                 Controls.ToolButton {
+                    flat: true
                     visible: !!page.note.taskId
                     icon.name: "go-next"
                     text: i18n("Open the task")

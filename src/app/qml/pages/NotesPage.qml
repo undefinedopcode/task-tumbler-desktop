@@ -71,6 +71,7 @@ Kirigami.ScrollablePage {
                 Repeater {
                     model: page.tags
                     Controls.ToolButton {
+                        flat: true
                         required property string modelData
                         text: "#" + modelData
                         checkable: true

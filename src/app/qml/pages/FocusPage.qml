@@ -68,12 +68,14 @@ Kirigami.Page {
             }
             Item { Layout.fillWidth: true }
             Controls.ToolButton {
+                flat: true
                 readonly property bool full: page.win !== null && page.win.visibility === Window.FullScreen
                 icon.name: full ? "view-restore" : "view-fullscreen"
                 text: full ? i18n("Exit full screen") : i18n("Full screen")
                 onClicked: if (page.win) page.win.visibility = full ? page.windowWas : Window.FullScreen
             }
             Controls.ToolButton {
+                flat: true
                 icon.name: "window-close"
                 text: i18n("Leave focus (Esc)")
                 onClicked: page.leave()

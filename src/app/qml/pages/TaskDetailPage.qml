@@ -288,6 +288,7 @@ FormCard.FormCardPage {
                 checked: modelData.status === "completed"
                 onToggled: AppController.setTaskStatus(modelData.id, checked ? "completed" : "pending")
                 trailing: Controls.ToolButton {
+                    flat: true
                     icon.name: "go-next"
                     display: Controls.AbstractButton.IconOnly
                     text: i18n("Open")
@@ -364,12 +365,14 @@ FormCard.FormCardPage {
                 description: Format.statusLabel(modelData.status)
                 trailing: RowLayout {
                     Controls.ToolButton {
+                        flat: true
                         icon.name: "go-next"
                         display: Controls.AbstractButton.IconOnly
                         text: i18n("Open")
                         onClicked: taskPage.openTask(modelData.id)
                     }
                     Controls.ToolButton {
+                        flat: true
                         icon.name: "list-remove"
                         display: Controls.AbstractButton.IconOnly
                         text: i18n("No longer waiting on this")
@@ -397,6 +400,7 @@ FormCard.FormCardPage {
                 required property var modelData
                 text: i18n("Holding up: %1", modelData.title)
                 trailing: Controls.ToolButton {
+                    flat: true
                     icon.name: "go-next"
                     display: Controls.AbstractButton.IconOnly
                     onClicked: taskPage.openTask(modelData.id)
@@ -453,12 +457,14 @@ FormCard.FormCardPage {
                 }
                 trailing: RowLayout {
                     Controls.ToolButton {
+                        flat: true
                         icon.name: "media-playback-start"
                         display: Controls.AbstractButton.IconOnly
                         text: i18n("Open now")
                         onClicked: AppController.runAction(modelData.id)
                     }
                     Controls.ToolButton {
+                        flat: true
                         icon.name: "list-remove"
                         display: Controls.AbstractButton.IconOnly
                         text: i18n("Remove")
@@ -486,6 +492,7 @@ FormCard.FormCardPage {
                 text: modelData.label
                 description: modelData.completed ? i18n("Done") : Format.minutes(Math.round((modelData.end - modelData.start) / 60000))
                 trailing: Controls.ToolButton {
+                    flat: true
                     visible: !modelData.completed
                     icon.name: "list-remove"
                     display: Controls.AbstractButton.IconOnly

@@ -119,6 +119,7 @@ Controls.ItemDelegate {
         }
 
         Controls.ToolButton {
+            flat: true
             visible: !row.finished && !row.blocked
             icon.name: "media-playback-start"
             display: Controls.AbstractButton.IconOnly
@@ -129,6 +130,7 @@ Controls.ItemDelegate {
             Controls.ToolTip.delay: Kirigami.Units.toolTipDelay
         }
         Controls.ToolButton {
+            flat: true
             visible: !row.finished && !row.isRecurring && row.nextBlock === 0
             icon.name: "view-calendar-day"
             display: Controls.AbstractButton.IconOnly

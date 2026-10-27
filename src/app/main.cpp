@@ -116,11 +116,16 @@ int main(int argc, char *argv[])
     QApplication::setWindowIcon(
         QIcon::fromTheme(QStringLiteral("org.kde.tasktumbler"), QIcon(QStringLiteral(":/icons/org.kde.tasktumbler.svg"))));
 
-#ifndef Q_OS_MACOS
-    // Plasma's own look. On macOS Kirigami picks its style itself.
-    if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE"))
+    // Plasma's own look, or the Mac's. Named on macOS too, although it's Qt's
+    // default there: Kirigami picks its colours (styles/macOS/Theme.qml) by
+    // the style's name, and an unnamed default has none.
+    if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
+#ifdef Q_OS_MACOS
+        QQuickStyle::setStyle(QStringLiteral("macOS"));
+#else
         QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
 #endif
+    }
 
     QCommandLineParser parser;
     about.setupCommandLine(&parser);

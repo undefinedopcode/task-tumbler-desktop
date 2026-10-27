@@ -39,6 +39,7 @@ Kirigami.ScrollablePage {
                     { key: "all", label: i18n("All") }
                 ]
                 Controls.ToolButton {
+                    flat: true
                     required property var modelData
                     text: modelData.label
                     checkable: true

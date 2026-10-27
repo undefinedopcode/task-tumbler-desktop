@@ -63,6 +63,7 @@ Kirigami.Dialog {
                     { key: "command", label: i18n("Command"), icon: "utilities-terminal" }
                 ]
                 Controls.ToolButton {
+                    flat: true
                     required property var modelData
                     text: modelData.label
                     icon.name: modelData.icon
