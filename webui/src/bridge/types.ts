@@ -248,3 +248,14 @@ export interface EventDetail {
   location: string
   feed?: string
 }
+
+export interface NoteDetail {
+  id: string
+  title: string
+  content: string
+  tags: string[]
+  color: string
+  taskId: string
+  taskTitle: string
+  updatedAt: number
+}

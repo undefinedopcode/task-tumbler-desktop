@@ -11,6 +11,7 @@ import { Toasts } from './components/Toasts'
 import { NavContext, type Nav } from './lib/nav'
 import { isMod, usePlatform } from './lib/platform'
 import { Placeholder } from './pages/Placeholder'
+import { NotesPage } from './pages/NotesPage'
 import { SchedulePage } from './pages/SchedulePage'
 import { TasksPage } from './pages/TasksPage'
 import { TodayPage } from './pages/TodayPage'
@@ -26,6 +27,7 @@ export function App() {
   const scheme = useProp('shell', 'colorScheme', 'light')
   const captureRef = useRef<HTMLInputElement>(null)
   const [openTask, setOpenTask] = useState<string | null>(null)
+  const [openNote, setOpenNote] = useState<string | null>(null)
   const [plan, setPlan] = useState<string | null>(null)
   const [event, setEvent] = useState<{ id: string; start?: number } | null>(null)
 
@@ -51,8 +53,12 @@ export function App() {
   const nav = useMemo<Nav>(
     () => ({
       openTask: setOpenTask,
-      // Notes aren't in the web UI yet: the page, for now.
-      openNote: () => showPage('notes'),
+      openNote: (id: string) => {
+        // Notes have two panes of their own; the task panel would crowd them.
+        setOpenTask(null)
+        setOpenNote(id)
+        showPage('notes')
+      },
       showPage,
       openPlan: (day?: string) => setPlan(day ?? isoDate(new Date())),
       editEvent: (id: string, start?: number) => setEvent({ id, start }),
@@ -91,6 +97,8 @@ export function App() {
               <TasksPage selectedTask={openTask} />
             ) : page === 'schedule' ? (
               <SchedulePage />
+            ) : page === 'notes' ? (
+              <NotesPage noteId={openNote} onSelect={setOpenNote} />
             ) : (
               <Placeholder title={pageTitles[page]} />
             )}

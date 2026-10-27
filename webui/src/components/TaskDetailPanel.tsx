@@ -291,7 +291,7 @@ function MinutesInput({ value, onSave }: { value: number; onSave: (m: number) =>
   )
 }
 
-function TagsInput({ tags, onSave }: { tags: string[]; onSave: (t: string[]) => void }) {
+export function TagsInput({ tags, onSave }: { tags: string[]; onSave: (t: string[]) => void }) {
   const [text, setText] = useState('')
   const add = () => {
     const more = text

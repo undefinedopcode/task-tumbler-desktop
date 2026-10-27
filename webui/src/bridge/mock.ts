@@ -282,7 +282,37 @@ export function createMock(): Objects {
     reply(cb, id())
   }
   app.prerequisiteCandidates = (taskId: string, cb: any) => reply(cb, all().filter((t) => t.id !== taskId))
-  app.notes = (_s: string, _t: string, _task: string, cb: any) => reply(cb, [])
+  const notes: any[] = [
+    { id: 'n1', title: 'Boiler call', content: '## Boiler\n\nThe **landlord** said Thursday.\n\n- [ ] Find the warranty', tags: ['home'], color: '#f59e0b', taskId: '', taskTitle: '', updatedAt: Date.now() - HOUR },
+  ]
+  const summary = (n: any) => ({ ...n, snippet: n.content.slice(0, 120).replace(/[#*\n]+/g, ' ') })
+  app.notes = (search: string, tag: string, taskId: string, cb: any) =>
+    reply(
+      cb,
+      notes
+        .filter((n) => (!search || `${n.title} ${n.content}`.toLowerCase().includes(search.toLowerCase())) && (!tag || n.tags.includes(tag)) && (!taskId || n.taskId === taskId))
+        .map(summary),
+    )
+  app.noteTags = (cb: any) => reply(cb, [...new Set(notes.flatMap((n) => n.tags))])
+  app.noteTaskChoices = (cb: any) => reply(cb, app.today.ready.map((r: ReadyTask) => ({ id: r.id, title: r.title })))
+  app.noteDetail = (noteId: string, cb: any) => reply(cb, notes.find((n) => n.id === noteId) ?? {})
+  app.createNote = (fields: any, cb: any) => {
+    const n = { id: id(), title: fields.title ?? 'Untitled note', content: '', tags: fields.tags ?? [], color: '', taskId: fields.taskId ?? '', taskTitle: '', updatedAt: Date.now() }
+    notes.unshift(n)
+    app.changed.emit(['notes'])
+    reply(cb, n.id)
+  }
+  app.saveNote = (noteId: string, fields: any, cb: any) => {
+    const n = notes.find((x) => x.id === noteId)
+    if (n) Object.assign(n, fields, { updatedAt: Date.now() })
+    app.changed.emit(['notes'])
+    reply(cb, true)
+  }
+  app.deleteNote = (noteId: string, cb: any) => {
+    notes.splice(notes.findIndex((x) => x.id === noteId), 1)
+    app.changed.emit(['notes'])
+    reply(cb, true)
+  }
   app.installedApps = (cb: any) => reply(cb, [{ id: 'firefox', name: 'Firefox', icon: 'firefox' }])
   app.addAction = (_t: string, _k: string, _x: string, _o: boolean, cb: any) => reply(cb, id())
   app.deleteTask = (taskId: string, cb: any) => {

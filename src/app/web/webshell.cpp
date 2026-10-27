@@ -5,6 +5,7 @@
 #include "shellbridge.h"
 
 #include <QCloseEvent>
+#include <QDesktopServices>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -37,6 +38,59 @@ QWebEngineScript channelScript()
     return script;
 }
 
+// The UI stays on its own pages: links elsewhere (a note's, say) open in the
+// browser instead of replacing the app, and so do new windows.
+class ShellPage : public QWebEnginePage
+{
+public:
+    ShellPage(QWebEngineProfile *profile, const QUrl &devUrl, bool sandboxed, QObject *parent)
+        : QWebEnginePage(profile, parent)
+        , m_devUrl(devUrl)
+        , m_sandboxed(sandboxed)
+    {
+    }
+
+protected:
+    bool acceptNavigationRequest(const QUrl &url, NavigationType type, bool isMainFrame) override
+    {
+        if (url.scheme() == QLatin1String(AppScheme::name) || url.scheme() == QLatin1String("data") || url.scheme() == QLatin1String("about"))
+            return true;
+        if (!m_devUrl.isEmpty() && url.scheme() == m_devUrl.scheme() && url.host() == m_devUrl.host() && url.port() == m_devUrl.port())
+            return true;
+        if (isMainFrame && type == NavigationTypeLinkClicked)
+            openOutside(url, m_sandboxed);
+        return false;
+    }
+
+    QWebEnginePage *createWindow(WebWindowType) override
+    {
+        // target="_blank" and window.open(): a page that only hands its first
+        // URL to the browser, then goes.
+        auto *page = new QWebEnginePage(profile(), this);
+        connect(page, &QWebEnginePage::urlChanged, page, [page, sandboxed = m_sandboxed](const QUrl &url) {
+            openOutside(url, sandboxed);
+            page->deleteLater();
+        });
+        return page;
+    }
+
+private:
+    // Screenshot runs only say so: they mustn't open things in the session.
+    static void openOutside(const QUrl &url, bool sandboxed)
+    {
+        static const QStringList allowed{QStringLiteral("http"), QStringLiteral("https"), QStringLiteral("mailto")};
+        if (!allowed.contains(url.scheme()))
+            return;
+        if (sandboxed)
+            qInfo("Would open %s", qPrintable(url.toString()));
+        else
+            QDesktopServices::openUrl(url);
+    }
+
+    QUrl m_devUrl;
+    bool m_sandboxed;
+};
+
 } // namespace
 
 WebShell::WebShell(AppController *app, QObject *sync, QObject *remote, const Options &options, QWidget *parent)
@@ -56,7 +110,7 @@ WebShell::WebShell(AppController *app, QObject *sync, QObject *remote, const Opt
     profile->installUrlSchemeHandler(AppScheme::name, new AppScheme(profile));
     profile->scripts()->insert(channelScript());
 
-    auto *page = new QWebEnginePage(profile, this);
+    auto *page = new ShellPage(profile, options.devUrl, options.sandboxed, this);
     page->settings()->setAttribute(QWebEngineSettings::FocusOnNavigationEnabled, true);
     page->settings()->setAttribute(QWebEngineSettings::ShowScrollBars, true);
 
