@@ -43,8 +43,10 @@ build frameworks/kcolorscheme "$KF_VERSION"
 build frameworks/kcrash "$KF_VERSION"
 build frameworks/karchive "$KF_VERSION"
 build frameworks/kwidgetsaddons "$KF_VERSION"
-# Bundling the Breeze icons comes with packaging the .app.
-build frameworks/kiconthemes "$KF_VERSION" -DUSE_BreezeIcons=OFF
+# The icons go into a library, not loose files; KIconThemes links it in and
+# the app picks the theme up with KIconTheme::initTheme().
+build frameworks/breeze-icons "$KF_VERSION" -DWITH_ICON_GENERATION=OFF -DSKIP_INSTALL_ICONS=ON
+build frameworks/kiconthemes "$KF_VERSION"
 build libraries/kirigami-addons "$ADDONS_VERSION"
 build frameworks/kcalendarcore "$KF_VERSION"
 build frameworks/prison "$KF_VERSION"

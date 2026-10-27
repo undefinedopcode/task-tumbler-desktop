@@ -19,6 +19,9 @@
 #include "sync/synchub.h"
 
 #include <KAboutData>
+#ifdef Q_OS_MACOS
+#include <KIconTheme>
+#endif
 #include <KLocalizedQmlContext>
 #include <KLocalizedString>
 #include <QAction>
@@ -32,6 +35,7 @@
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
+#include <QStandardPaths>
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QTimer>
@@ -58,6 +62,26 @@ int runMcp(int argc, char *argv[])
     tumbler::mcp::Server server(&backend);
     return tumbler::mcp::runStdio(server);
 }
+#ifdef Q_OS_MACOS
+// KNotifications looks for tasktumbler.notifyrc in the data locations, and
+// on macOS those don't include the app bundle. Keep a copy in Application
+// Support, refreshed when the bundled one changes.
+void installNotifyConfig()
+{
+    QFile bundled(QStringLiteral(":/notifyrc/tasktumbler.notifyrc"));
+    if (!bundled.open(QIODevice::ReadOnly))
+        return;
+    const QByteArray config = bundled.readAll();
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/knotifications6");
+    QFile installed(dir + QStringLiteral("/tasktumbler.notifyrc"));
+    if (installed.open(QIODevice::ReadOnly) && installed.readAll() == config)
+        return;
+    installed.close();
+    QDir().mkpath(dir);
+    if (installed.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        installed.write(config);
+}
+#endif
 } // namespace
 
 int main(int argc, char *argv[])
@@ -73,8 +97,16 @@ int main(int argc, char *argv[])
         qputenv("XDG_DATA_DIRS", QByteArray(TUMBLER_DEV_DATA_DIR ":") + qgetenv("XDG_DATA_DIRS"));
 #endif
 
+#ifdef Q_OS_MACOS
+    // No system icon theme on a Mac: use the Breeze icons built into KIconThemes.
+    KIconTheme::initTheme();
+#endif
+
     QApplication app(argc, argv);
     KLocalizedString::setApplicationDomain("tasktumbler");
+#ifdef Q_OS_MACOS
+    installNotifyConfig();
+#endif
 
     KAboutData about(QStringLiteral("tasktumbler"), i18n("Task Tumbler"), QStringLiteral("0.1.0"),
                      i18n("Energy-aware tasks and scheduling"), KAboutLicense::MIT);

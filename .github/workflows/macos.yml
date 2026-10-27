@@ -52,3 +52,37 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+      - name: Package
+        run: .github/scripts/package-macos.sh build "$HOME/kde-deps" dist
+
+      # The packaged app, on the real (Cocoa) platform, in sandboxed
+      # screenshot mode: proof it starts, and a look at it without a Mac.
+      - name: Screenshots
+        env:
+          QT_QPA_PLATFORM: cocoa
+        run: |
+          mkdir -p shots
+          for page in today tasks schedule settings closeout; do
+            TUMBLER_SCREENSHOT="$PWD/shots/$page.png" TUMBLER_PAGE="$page" TUMBLER_SHOT_SIZE=1100x800 \
+              "dist/Task Tumbler.app/Contents/MacOS/task-tumbler" --db "$RUNNER_TEMP/shots.db" > "shots/$page.log" 2>&1 &
+            pid=$!
+            for _ in $(seq 1 60); do kill -0 "$pid" 2>/dev/null || break; sleep 0.5; done
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" || echo "$page: exit $?"
+            test -s "shots/$page.png" || { echo "no screenshot of $page"; cat "shots/$page.log"; exit 1; }
+          done
+
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Task-Tumbler-macOS
+          path: dist/Task-Tumbler-macOS.zip
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: shots/
+          if-no-files-found: ignore

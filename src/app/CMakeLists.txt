@@ -85,6 +85,25 @@ configure_file(${PROJECT_SOURCE_DIR}/resources/desktop/tasktumbler.notifyrc
                ${CMAKE_BINARY_DIR}/share/knotifications6/tasktumbler.notifyrc COPYONLY)
 target_compile_definitions(task-tumbler PRIVATE TUMBLER_DEV_DATA_DIR="${CMAKE_BINARY_DIR}/share")
 
+if(APPLE)
+    # A proper .app: Info.plist, the icon (an .icns made from the PNGs by
+    # iconutil), and the notification config, which main.cpp hands to
+    # KNotifications. .github/scripts/package-macos.sh bundles the libraries.
+    include(ECMAddAppIcon)
+    file(GLOB MAC_ICONS ${PROJECT_SOURCE_DIR}/resources/icons/macos/*-apps-tasktumbler.png)
+    ecm_add_app_icon(MAC_ICON_SOURCES ICONS ${MAC_ICONS} OUTFILE_BASENAME task-tumbler)
+    target_sources(task-tumbler PRIVATE ${MAC_ICON_SOURCES})
+    qt_add_resources(task-tumbler "notifyrc"
+        PREFIX "/notifyrc"
+        BASE "${PROJECT_SOURCE_DIR}/resources/desktop"
+        FILES "${PROJECT_SOURCE_DIR}/resources/desktop/tasktumbler.notifyrc"
+    )
+    set_target_properties(task-tumbler PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_INFO_PLIST ${PROJECT_SOURCE_DIR}/resources/macos/Info.plist.in
+    )
+endif()
+
 install(TARGETS task-tumbler ${KDE_INSTALL_TARGETS_DEFAULT_ARGS})
 install(FILES ${PROJECT_SOURCE_DIR}/resources/desktop/org.kde.tasktumbler.desktop DESTINATION ${KDE_INSTALL_APPDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/resources/desktop/tasktumbler.notifyrc DESTINATION ${KDE_INSTALL_KNOTIFYRCDIR})
