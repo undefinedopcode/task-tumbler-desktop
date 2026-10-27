@@ -330,6 +330,8 @@ int main(int argc, char *argv[])
                     QString name = shot;
                     name.insert(name.lastIndexOf(QLatin1Char('.')), QStringLiteral("-quick-capture"));
                     shell->capture()->grab().save(name);
+                    // On macOS quit waits while it's open (seen in CI).
+                    shell->capture()->hide();
                 }
                 QCoreApplication::quit();
             });
