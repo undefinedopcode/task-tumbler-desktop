@@ -197,3 +197,54 @@ export interface AiState {
   busy?: boolean
   label?: string
 }
+
+export interface DayAgenda {
+  date: string
+  label: string
+  dayStart: number
+  dayEnd: number
+  isToday: boolean
+  items: AgendaItem[]
+  allDay: AgendaItem[]
+  windows: { name: string; color: string; start: number; end: number }[]
+}
+
+export interface PlannedBlock {
+  taskId: string
+  title: string
+  start: number
+  end: number
+  reason: string
+  estimate: number
+  checked: boolean
+}
+
+export interface Plan {
+  date: string
+  label: string
+  blocks: PlannedBlock[]
+  unplaced: { taskId: string; title: string; reason: string }[]
+  explanation: string
+  usedAi: boolean
+  aiError: string
+  by: string
+  logId: string
+}
+
+export type BlockingMode = 'none' | 'block_all' | 'recurring_only' | 'tags_only'
+
+export interface EventDetail {
+  id: string
+  title: string
+  description?: string
+  allDay: boolean
+  date: string
+  endDate: string
+  startTime: string
+  endTime: string
+  blockingMode: BlockingMode
+  allowedTags: string[]
+  color: string
+  location: string
+  feed?: string
+}

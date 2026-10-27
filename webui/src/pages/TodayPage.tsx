@@ -10,6 +10,7 @@ import { ReadyRow } from '../components/ReadyRow'
 import { WorkingCard } from '../components/WorkingCard'
 import { Button, Card, Chip, Dot, Empty, SectionHeader } from '../components/ui'
 import { greeting } from '../lib/format'
+import { useNav } from '../lib/nav'
 import type { Page } from '../components/Sidebar'
 
 export const TodayPage = forwardRef<HTMLInputElement, { onPage: (p: Page) => void }>(function TodayPage({ onPage }, captureRef) {
@@ -18,6 +19,7 @@ export const TodayPage = forwardRef<HTMLInputElement, { onPage: (p: Page) => voi
   const working = useProp<Working>('app', 'working', {})
   const away = useProp<Away>('app', 'away', {})
   const [showDone, setShowDone] = useState(false)
+  const nav = useNav()
   if (!today) return null
 
   const timeline = [...today.overdue, ...today.now, ...today.upcoming]
@@ -119,7 +121,7 @@ export const TodayPage = forwardRef<HTMLInputElement, { onPage: (p: Page) => voi
             title="Plan"
             count={left || undefined}
             action={
-              <Button size="sm" variant="ghost" icon={<Sparkles className="size-3.5" />} onClick={() => onPage('schedule')}>
+              <Button size="sm" variant="ghost" icon={<Sparkles className="size-3.5" />} onClick={() => nav.openPlan()}>
                 Plan my day
               </Button>
             }

@@ -294,6 +294,52 @@ export function createMock(): Objects {
   app.aiFailed = signal()
   app.commandNeedsApproval = signal()
 
+  app.dayAgenda = (iso: string, cb: any) => {
+    const start = new Date(`${iso}T00:00:00`).getTime()
+    const isToday = iso === app.today.date
+    const t: Today = app.today
+    reply(cb, {
+      date: iso,
+      label: new Date(start).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }),
+      dayStart: start,
+      dayEnd: start + 24 * HOUR,
+      isToday,
+      items: isToday ? [...t.now, ...t.upcoming, ...t.overdue, ...t.done] : [],
+      allDay: isToday ? t.allDay : [],
+      windows: [{ name: 'Default', color: '#5b5bd6', start: start + 6 * HOUR, end: start + 23 * HOUR }],
+    })
+  }
+  app.planReady = signal()
+  app.planDay = (iso: string) =>
+    setTimeout(
+      () =>
+        app.planReady.emit({
+          date: iso,
+          label: iso,
+          blocks: app.today.ready.slice(0, 3).map((r: ReadyTask, i: number) => ({
+            taskId: r.id,
+            title: r.title,
+            start: Date.now() + (i + 1) * HOUR,
+            end: Date.now() + (i + 1) * HOUR + r.estimate * 60_000,
+            reason: r.priority === 'urgent' ? 'Urgent' : '',
+            estimate: r.estimate,
+            checked: true,
+          })),
+          unplaced: [],
+          explanation: '',
+          usedAi: false,
+          aiError: '',
+          by: '',
+          logId: '',
+        }),
+      400,
+    )
+  app.acceptPlan = (_b: unknown, _p: unknown, cb: any) => reply(cb, true)
+  app.dismissPlan = () => {}
+  app.moveSchedule = (_id: string, _start: number, cb: any) => reply(cb, true)
+  app.eventDetail = (_id: string, cb: any) => reply(cb, {})
+  app.saveEvent = (_e: unknown, cb: any) => reply(cb, id())
+
   const shell: any = {
     platform: 'linux',
     colorScheme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',

@@ -25,6 +25,15 @@ export function Dialog({
       <D.Portal>
         <D.Overlay className="fixed inset-0 z-40 bg-black/25 backdrop-blur-[2px] data-[state=open]:animate-[fade-in_120ms_ease-out]" />
         <D.Content
+          // A field marked autoFocus gets the focus; otherwise the dialog
+          // itself, not its close button.
+          onOpenAutoFocus={(e) => {
+            const content = e.currentTarget as HTMLElement
+            const wanted = content.querySelector<HTMLElement>('[autofocus]')
+            e.preventDefault()
+            ;(wanted ?? content).focus()
+          }}
+          tabIndex={-1}
           className={clsx(
             'fixed top-1/2 left-1/2 z-50 flex max-h-[85vh] w-[calc(100vw-48px)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-line bg-surface shadow-pop outline-none',
             'data-[state=open]:animate-pop-in',

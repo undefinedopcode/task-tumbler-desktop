@@ -81,11 +81,16 @@ export function useSignal(path: Name | `${Name}.${string}`, signal: string, fn: 
     let o: QObj | undefined
     let alive = true
     const handler = (...args: any[]) => fn(...args)
-    connection.then((objects) => {
+    const hook = (objects: Objects) => {
       if (!alive) return
       o = resolveObject(objects, path)
       o?.[signal]?.connect(handler)
-    })
+    }
+    // Straight away when connected: a request made right after (in a later
+    // effect) must not get its answer before this is listening.
+    const ready = current()
+    if (ready) hook(ready)
+    else connection.then(hook)
     return () => {
       alive = false
       o?.[signal]?.disconnect(handler)
