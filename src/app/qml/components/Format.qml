@@ -13,6 +13,17 @@ QtObject {
         low: "#8b8d98"
     })
 
+    // Shortcut hints the Mac way: "Ctrl+N" reads "⌘N" there (Qt already maps
+    // the shortcuts themselves), and the global capture key is ⇧⌘Space.
+    function keys(text) {
+        if (Qt.platform.os !== "osx")
+            return text
+        return text.replace(/Meta\+Shift\+Space/g, "⇧⌘Space")
+                   .replace(/Ctrl\+Shift\+/g, "⇧⌘")
+                   .replace(/Ctrl\+Enter/g, "⌘↩")
+                   .replace(/Ctrl\+/g, "⌘")
+    }
+
     function time(ms) {
         return Qt.formatTime(new Date(ms), Qt.locale().timeFormat(Locale.ShortFormat))
     }

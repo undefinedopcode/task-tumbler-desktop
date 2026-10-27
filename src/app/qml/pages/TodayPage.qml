@@ -27,13 +27,13 @@ Kirigami.ScrollablePage {
         Kirigami.Action {
             text: i18n("Plan my day")
             icon.name: "view-calendar-week"
-            tooltip: i18n("Fill free time with what matters most (Ctrl+P)")
+            tooltip: Format.keys(i18n("Fill free time with what matters most (Ctrl+P)"))
             onTriggered: applicationWindow().openPlan()
         },
         Kirigami.Action {
             text: i18n("Add")
             icon.name: "list-add"
-            tooltip: i18n("Quick capture (Ctrl+N)")
+            tooltip: Format.keys(i18n("Quick capture (Ctrl+N)"))
             onTriggered: Qt.callLater(() => applicationWindow().openCapture())
         }
     ]
@@ -239,7 +239,7 @@ Kirigami.ScrollablePage {
             Layout.topMargin: Kirigami.Units.gridUnit * 4
             icon.source: "qrc:/icons/org.kde.tasktumbler.svg"
             text: i18n("A clear day")
-            explanation: i18n("Nothing scheduled and nothing waiting. Capture whatever's on your mind with Ctrl+N, or from anywhere with Meta+Shift+Space.")
+            explanation: Format.keys(i18n("Nothing scheduled and nothing waiting. Capture whatever's on your mind with Ctrl+N, or from anywhere with Meta+Shift+Space."))
             helpfulAction: Kirigami.Action {
                 text: i18n("Capture something")
                 icon.name: "list-add"

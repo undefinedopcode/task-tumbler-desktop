@@ -227,7 +227,7 @@ Kirigami.ApplicationWindow {
 
     Connections {
         target: AppController
-        function onMessage(text) { root.showPassiveNotification(text, "short") }
+        function onMessage(text) { root.showPassiveNotification(Format.keys(text), "short") }
         function onShowCaptureRequested() { root.openCapture() }
         function onShowWindowRequested() {
             root.show()

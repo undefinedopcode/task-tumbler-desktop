@@ -378,7 +378,7 @@ FormCard.FormCardPage {
         FormCard.FormDelegateSeparator {}
         FormCard.FormTextDelegate {
             text: i18n("Quick capture from anywhere")
-            description: page.mac ? i18n("⌘⇧Space")
+            description: page.mac ? i18n("⇧⌘Space")
                                   : i18n("Meta+Shift+Space by default; change it in System Settings → Shortcuts → Task Tumbler")
         }
     }

@@ -157,7 +157,7 @@ FormCard.FormCardPage {
                                        { choice: "skip", text: i18n("Skip today"), icon: "media-skip-forward", tip: i18n("It comes round again anyway") }]
                                     : [{ choice: "tomorrow", text: i18n("Tomorrow"), icon: "go-next", tip: i18n("The first free slot tomorrow") },
                                        { choice: "pile", text: i18n("Back to the pile"), icon: "view-task", tip: i18n("Unschedule it; it stays on your list") },
-                                       { choice: "drop", text: i18n("Let it go"), icon: "edit-delete-remove", tip: i18n("Cancel the task (Ctrl+Z to undo)") },
+                                       { choice: "drop", text: i18n("Let it go"), icon: "edit-delete-remove", tip: Format.keys(i18n("Cancel the task (Ctrl+Z to undo)")) },
                                        { choice: "done", text: i18n("Did it"), icon: "dialog-ok-apply", tip: i18n("Mark it done") }]
                                 Controls.Button {
                                     required property var modelData

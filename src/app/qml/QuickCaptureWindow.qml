@@ -165,7 +165,7 @@ Window {
                     win.asking = true
                     AppController.aiCapture(field.text)
                 }
-                Controls.ToolTip.text: i18n("Let the AI read a messy note (Ctrl+Enter)")
+                Controls.ToolTip.text: Format.keys(i18n("Let the AI read a messy note (Ctrl+Enter)"))
                 Controls.ToolTip.visible: hovered
                 Controls.ToolTip.delay: Kirigami.Units.toolTipDelay
             }

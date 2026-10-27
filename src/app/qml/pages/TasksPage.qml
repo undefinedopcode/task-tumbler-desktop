@@ -15,7 +15,7 @@ Kirigami.ScrollablePage {
         Kirigami.Action {
             text: i18n("Add")
             icon.name: "list-add"
-            tooltip: i18n("Quick capture (Ctrl+N)")
+            tooltip: Format.keys(i18n("Quick capture (Ctrl+N)"))
             onTriggered: applicationWindow().openCapture()
         }
     ]
@@ -82,7 +82,7 @@ Kirigami.ScrollablePage {
                 : AppController.tasks.filter === "completed" ? i18n("Nothing finished yet")
                 : i18n("Nothing to do")
             explanation: AppController.tasks.filter === "active" && !AppController.tasks.search
-                         ? i18n("Enjoy it, or capture the next thing with Ctrl+N.") : ""
+                         ? Format.keys(i18n("Enjoy it, or capture the next thing with Ctrl+N.")) : ""
         }
     }
 }

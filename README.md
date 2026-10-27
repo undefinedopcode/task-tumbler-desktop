@@ -94,7 +94,7 @@ ctest --test-dir build --output-on-failure
 ./build/src/app/task-tumbler --db /tmp/t.db  # a separate test database, runs alongside
 ```
 
-**macOS (in progress):** it builds against Homebrew's Qt plus a handful of KDE libraries that Homebrew doesn't package; `.github/scripts/build-kde-deps.sh ~/kde-deps` builds them, then configure with `-DCMAKE_PREFIX_PATH="$(brew --prefix qt);$HOME/kde-deps;$(brew --prefix)"`. The `macOS` GitHub Actions workflow does the same and runs the tests. On a Mac there's no KRunner or Do Not Disturb while focusing, quick capture is ⌘⇧Space, and start at login is a LaunchAgent. There's no `.app` bundle yet.
+**macOS (in progress):** it builds against Homebrew's Qt plus a handful of KDE libraries that Homebrew doesn't package; `.github/scripts/build-kde-deps.sh ~/kde-deps` builds them, then configure with `-DCMAKE_PREFIX_PATH="$(brew --prefix qt);$HOME/kde-deps;$(brew --prefix)"`. The `macOS` GitHub Actions workflow does the same and runs the tests. On a Mac there's no KRunner or Do Not Disturb while focusing, quick capture is ⇧⌘Space, and start at login is a LaunchAgent. There's no `.app` bundle yet.
 
 `task-tumbler --capture` opens quick capture (in the running instance if there is one). `--hidden` starts in the tray.
 

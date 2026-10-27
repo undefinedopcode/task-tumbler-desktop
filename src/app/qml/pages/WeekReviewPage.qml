@@ -235,7 +235,7 @@ FormCard.FormCardPage {
                     icon.name: "edit-delete-remove"
                     text: i18n("Let it go")
                     display: page.width > Kirigami.Units.gridUnit * 30 ? Controls.AbstractButton.TextBesideIcon : Controls.AbstractButton.IconOnly
-                    Controls.ToolTip.text: i18n("Cancel the task (Ctrl+Z to undo)")
+                    Controls.ToolTip.text: Format.keys(i18n("Cancel the task (Ctrl+Z to undo)"))
                     Controls.ToolTip.visible: hovered
                     onClicked: AppController.letGo(row.modelData.taskId)
                 }
