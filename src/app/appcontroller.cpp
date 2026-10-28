@@ -68,6 +68,13 @@ QString formatTime(qint64 ms, const QTimeZone &zone)
     return QStringLiteral("%1 %2").arg(QLocale().toString(dt.date(), QStringLiteral("ddd d MMM")), time);
 }
 
+// [start, end) of the local day containing `ms`.
+QPair<qint64, qint64> dayOf(qint64 ms, const QTimeZone &zone)
+{
+    const QDate day = QDateTime::fromMSecsSinceEpoch(ms, zone).date();
+    return {QDateTime(day, QTime(0, 0), zone).toMSecsSinceEpoch(), QDateTime(day.addDays(1), QTime(0, 0), zone).toMSecsSinceEpoch()};
+}
+
 } // namespace
 
 AppController::AppController(Database &db, QObject *parent, KeyStore *keys)
@@ -463,7 +470,19 @@ bool AppController::setTaskStatus(const QString &id, const QString &status)
     if (!s)
         return false;
     QString error;
-    auto m = ops::setTaskStatus(queries(), id, *s, now(), &error);
+    const qint64 at = now();
+    auto m = ops::setTaskStatus(queries(), id, *s, at, &error);
+    // Today's schedule follows: done shows in its Done list (with a block
+    // added if none was planned), reopening puts today's blocks back.
+    const auto before = queries().task(id);
+    const auto [dayStart, dayEnd] = dayOf(at, zone());
+    std::optional<Mutation> schedule;
+    if (m && before && *s == TaskStatus::Completed && !isFinished(before->status))
+        schedule = ops::recordDone(queries(), id, at, dayStart, dayEnd);
+    else if (m && before && !isFinished(*s) && isFinished(before->status))
+        schedule = ops::reopenToday(queries(), id, dayStart, dayEnd);
+    if (schedule)
+        m = combine(m->text, {*m, *schedule});
     const bool ok = apply(m, error);
     if (ok && *s == TaskStatus::Completed) {
         if (const auto t = queries().task(id))
@@ -627,7 +646,23 @@ bool AppController::scheduleAt(const QString &taskId, qint64 start, int minutes)
     const int duration = minutes > 0 ? minutes : plannedMinutes(*task);
     Mutation m = ops::scheduleTask(newId(), taskId, start, start + qint64(duration) * kMinute, now());
     m.text = QStringLiteral("Schedule “%1”").arg(task->title);
-    return apply(m);
+    const bool ok = apply(m);
+    if (ok)
+        Q_EMIT message(QStringLiteral("“%1” scheduled for %2").arg(task->title, formatTime(start, zone())));
+    return ok;
+}
+
+bool AppController::reschedule(const QString &id, qint64 start, int minutes)
+{
+    const auto block = queries().schedule(id);
+    if (!block || block->completed)
+        return false;
+    const qint64 length = minutes > 0 ? qint64(minutes) * kMinute : block->end - block->start;
+    QString error;
+    const bool ok = apply(ops::moveSchedule(queries(), id, start, start + length, false, now(), &error), error);
+    if (ok)
+        noteMove(id);
+    return ok;
 }
 
 bool AppController::moveSchedule(const QString &id, qint64 start)
@@ -790,7 +825,16 @@ QVariantMap AppController::dayAgenda(const QString &isoDate) const
 bool AppController::startWork(const QString &taskId)
 {
     QString error;
-    if (!apply(ops::startWork(queries(), newId(), taskId, now(), &error), error))
+    const QString workLogId = newId();
+    const qint64 at = now();
+    auto m = ops::startWork(queries(), workLogId, taskId, at, &error);
+    // What you start shows on today's schedule straight away.
+    const auto [dayStart, dayEnd] = dayOf(at, zone());
+    if (m) {
+        if (const auto place = ops::placeWork(queries(), taskId, workLogId, at, dayStart, dayEnd))
+            m = combine(m->text, {*m, *place});
+    }
+    if (!apply(m, error))
         return false;
     Q_EMIT workStarted(taskId);
     launchForTask(taskId);

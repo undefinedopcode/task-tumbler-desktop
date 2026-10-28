@@ -23,7 +23,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { call, useProp, useQuery, useSignal } from '../bridge/hooks'
-import type { AiState, Category, NoteSummary, ProposedStep, Recurrence, Task, TaskAction, TaskDetail, Working } from '../bridge/types'
+import type { AiState, Category, NoteSummary, ProposedStep, Recurrence, ScheduleBlock, Task, TaskAction, TaskDetail, Working } from '../bridge/types'
 import { duration } from '../lib/format'
 import { useNav } from '../lib/nav'
 import { EditableText, Field, PanelSection } from './fields'
@@ -33,6 +33,7 @@ import { DatePicker } from './DatePicker'
 import { Select } from './Select'
 import { TimePicker } from './TimePicker'
 import { LauncherDialog } from './LauncherDialog'
+import { ScheduleDialog, ScheduleMenu } from './ScheduleDialog'
 import { Button, Checkbox, Chip, Dot, IconButton, Toggle } from './ui'
 
 const statusLabel: Record<string, string> = { pending: 'To do', in_progress: 'In progress', completed: 'Done', cancelled: 'Cancelled' }
@@ -57,6 +58,8 @@ export function TaskDetailPanel({ taskId, onClose }: { taskId: string; onClose: 
   const ai = useProp<AiState>('app', 'ai', {})
   const nav = useNav()
   const [launcherOpen, setLauncherOpen] = useState(false)
+  // The schedule dialog: closed, a new block, or moving one.
+  const [scheduling, setScheduling] = useState<null | { block?: ScheduleBlock }>(null)
 
   // Gone (deleted, or undone into nonexistence): close.
   useEffect(() => {
@@ -96,9 +99,7 @@ export function TaskDetailPanel({ taskId, onClose }: { taskId: string; onClose: 
           {!finished && (
             <>
               {!detail.isRecurring && (
-                <IconButton label="Schedule in the next free slot" size="sm" onClick={() => call('app', 'scheduleNextSlot', taskId)}>
-                  <CalendarPlus className="size-4" />
-                </IconButton>
+                <ScheduleMenu taskId={taskId} title={detail.title} estimate={detail.estimate} />
               )}
               <IconButton label="Focus: start and hide everything else" size="sm" onClick={() => call('app', 'startFocus', taskId)}>
                 <Maximize2 className="size-4" />
@@ -251,7 +252,13 @@ export function TaskDetailPanel({ taskId, onClose }: { taskId: string; onClose: 
           {detail.schedules.map((b) => (
             <div key={b.id} className="group flex h-8 items-center gap-2 rounded-lg px-1 hover:bg-hover">
               <Clock className="size-3.5 text-subtle" />
-              <span className={clsx('flex-1 text-[13px]', b.completed && 'text-subtle line-through')}>{b.label}</span>
+              {b.completed ? (
+                <span className="flex-1 text-[13px] text-subtle line-through">{b.label}</span>
+              ) : (
+                <button className="flex-1 text-left text-[13px] hover:underline" title="Change day or time" onClick={() => setScheduling({ block: b })}>
+                  {b.label}
+                </button>
+              )}
               <span className="text-[12px] text-subtle">{duration(Math.round((b.end - b.start) / 60000))}</span>
               {!b.completed && (
                 <IconButton label="Remove from schedule" size="sm" className="opacity-0 group-hover:opacity-100" onClick={() => call('app', 'unschedule', b.id)}>
@@ -261,10 +268,23 @@ export function TaskDetailPanel({ taskId, onClose }: { taskId: string; onClose: 
             </div>
           ))}
           {!finished && !detail.isRecurring && (
-            <Button size="sm" variant="ghost" icon={<CalendarPlus className="size-3.5" />} className="mt-1 -ml-1" onClick={() => call('app', 'scheduleNextSlot', taskId)}>
-              Schedule in the next free slot
-            </Button>
+            <div className="mt-1 -ml-1 flex flex-wrap gap-1">
+              <Button size="sm" variant="ghost" icon={<CalendarPlus className="size-3.5" />} onClick={() => call('app', 'scheduleNextSlot', taskId)}>
+                Next free slot
+              </Button>
+              <Button size="sm" variant="ghost" icon={<Clock className="size-3.5" />} onClick={() => setScheduling({})}>
+                Pick a day and time…
+              </Button>
+            </div>
           )}
+          <ScheduleDialog
+            taskId={taskId}
+            title={detail.title}
+            estimate={detail.estimate}
+            block={scheduling?.block}
+            open={!!scheduling}
+            onClose={() => setScheduling(null)}
+          />
         </PanelSection>
         <div className="h-8" />
       </div>

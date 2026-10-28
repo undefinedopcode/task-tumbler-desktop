@@ -1,10 +1,11 @@
 import clsx from 'clsx'
-import { CalendarClock, CalendarPlus, Check, Clock, Flag, Lock, Play, Repeat, RotateCcw } from 'lucide-react'
+import { CalendarClock, Check, Clock, Flag, Lock, Play, Repeat, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 import { call } from '../bridge/hooks'
 import type { TaskRowData } from '../bridge/types'
 import { dueLabel, duration, time } from '../lib/format'
 import { useNav } from '../lib/nav'
+import { ScheduleMenu } from './ScheduleDialog'
 import { Button, Chip, Dot, IconButton } from './ui'
 
 function nextBlockLabel(ms: number): string {
@@ -102,9 +103,7 @@ export function TaskRow({ task, selected }: { task: TaskRowData; selected?: bool
         ) : (
           <>
             {!task.isRecurring && (
-              <IconButton label="Schedule in the next free slot" size="sm" onClick={() => call('app', 'scheduleNextSlot', task.taskId)}>
-                <CalendarPlus className="size-4" />
-              </IconButton>
+              <ScheduleMenu taskId={task.taskId} title={task.title} estimate={task.estimate} />
             )}
             {!task.blocked && (
               <Button size="sm" variant="soft" icon={<Play className="size-3.5" />} onClick={() => call('app', 'startWork', task.taskId)}>

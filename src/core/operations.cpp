@@ -19,6 +19,8 @@ QString newId()
 
 namespace {
 
+constexpr qint64 kMinute = 60 * 1000;
+
 void setError(QString *error, const QString &message)
 {
     if (error)
@@ -531,6 +533,143 @@ std::optional<Mutation> startWork(const Queries &q, const QString &workLogId, co
             return true;
         return exec(db, QStringLiteral("UPDATE tasks SET status = 'in_progress', updated_at = ? WHERE id = ?"), {now, taskId}, error)
             && addHistory(db, taskId, QStringLiteral("started"), now, {}, error);
+    };
+    return m;
+}
+
+std::optional<Mutation> placeWork(const Queries &q, const QString &taskId, const QString &workLogId, qint64 now, qint64 dayStart,
+                                  qint64 dayEnd)
+{
+    const auto task = q.task(taskId);
+    if (!task || task->isRecurring())
+        return std::nullopt;
+
+    std::optional<ScheduleBlock> current, next;
+    for (const ScheduleBlock &s : q.schedulesForTask(taskId)) {
+        if (s.completed || s.end <= dayStart || s.start >= dayEnd)
+            continue;
+        if (s.start <= now && now < s.end)
+            current = s;
+        else if (!next)
+            next = s; // earliest: overdue first, then upcoming
+    }
+
+    Mutation m;
+    m.text = QStringLiteral("Start working on “%1”").arg(task->title);
+    m.scopes = {{QStringLiteral("schedules"), QStringLiteral("task_id = ?"), {taskId}}};
+    if (current) {
+        const QString id = current->id;
+        m.apply = [=](QSqlDatabase db, QString *error) {
+            return exec(db, QStringLiteral("UPDATE schedules SET actual_start = COALESCE(actual_start, ?), work_log_id = ? WHERE id = ?"),
+                        {now, workLogId, id}, error);
+        };
+    } else if (next) {
+        const QString id = next->id;
+        const qint64 end = now + (next->end - next->start);
+        m.apply = [=](QSqlDatabase db, QString *error) {
+            return exec(db,
+                        QStringLiteral("UPDATE schedules SET scheduled_start = ?, scheduled_end = ?, actual_start = ?, work_log_id = ? "
+                                       "WHERE id = ?"),
+                        {now, end, now, workLogId, id}, error);
+        };
+    } else {
+        const QString id = newId();
+        const qint64 end = now + qint64(std::max(5, task->estimateMinutes)) * kMinute;
+        m.apply = [=](QSqlDatabase db, QString *error) {
+            return exec(db,
+                        QStringLiteral("INSERT INTO schedules (id, task_id, scheduled_start, scheduled_end, actual_start, work_log_id, "
+                                       "created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"),
+                        {id, taskId, now, end, now, workLogId, now}, error);
+        };
+    }
+    return m;
+}
+
+std::optional<Mutation> recordDone(const Queries &q, const QString &taskId, qint64 now, qint64 dayStart, qint64 dayEnd)
+{
+    const auto task = q.task(taskId);
+    if (!task || task->isRecurring())
+        return std::nullopt;
+
+    struct Change {
+        QString id;
+        qint64 start, end;
+    };
+    QList<Change> open;
+    bool doneToday = false;
+    for (const ScheduleBlock &s : q.schedulesForTask(taskId)) {
+        if (s.end <= dayStart || s.start >= dayEnd)
+            continue;
+        if (s.completed) {
+            doneToday = true;
+            continue;
+        }
+        // Finished early: the block ends now. Not started yet: it keeps its
+        // length and ends now.
+        const qint64 start = s.start > now ? now - (s.end - s.start) : s.start;
+        open.append({s.id, start, std::min(s.end, now)});
+    }
+
+    Mutation m;
+    m.text = QStringLiteral("Done");
+    m.scopes = {{QStringLiteral("schedules"), QStringLiteral("task_id = ?"), {taskId}}};
+    if (!open.isEmpty()) {
+        m.apply = [=](QSqlDatabase db, QString *error) {
+            for (const Change &c : open) {
+                if (!exec(db,
+                          QStringLiteral("UPDATE schedules SET completed = 1, scheduled_start = ?, scheduled_end = ?, "
+                                         "actual_start = COALESCE(actual_start, ?), actual_end = ? WHERE id = ?"),
+                          {c.start, c.end, c.start, now, c.id}, error))
+                    return false;
+            }
+            return true;
+        };
+        return m;
+    }
+    if (doneToday)
+        return std::nullopt;
+
+    // Nothing planned: show its latest session today, else its estimate.
+    qint64 start = now - qint64(std::max(5, task->estimateMinutes)) * kMinute;
+    qint64 end = now;
+    std::optional<WorkLog> session;
+    for (const WorkLog &w : q.workLogsForTask(taskId)) {
+        if (w.startedAt >= dayStart && w.startedAt < now && (!session || w.startedAt > session->startedAt))
+            session = w;
+    }
+    if (session) {
+        start = session->startedAt;
+        end = std::max(start + kMinute, session->endedAt.value_or(now));
+    }
+    const QString id = newId();
+    const QVariant workLogId = session ? QVariant(session->id) : QVariant();
+    m.apply = [=](QSqlDatabase db, QString *error) {
+        return exec(db,
+                    QStringLiteral("INSERT INTO schedules (id, task_id, scheduled_start, scheduled_end, actual_start, actual_end, completed, "
+                                   "work_log_id, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)"),
+                    {id, taskId, start, end, start, end, workLogId, now}, error);
+    };
+    return m;
+}
+
+std::optional<Mutation> reopenToday(const Queries &q, const QString &taskId, qint64 dayStart, qint64 dayEnd)
+{
+    QStringList ids;
+    for (const ScheduleBlock &s : q.schedulesForTask(taskId)) {
+        if (s.completed && s.end > dayStart && s.start < dayEnd)
+            ids.append(s.id);
+    }
+    if (ids.isEmpty())
+        return std::nullopt;
+    Mutation m;
+    m.text = QStringLiteral("Reopen");
+    m.scopes = {{QStringLiteral("schedules"), QStringLiteral("task_id = ?"), {taskId}}};
+    m.apply = [ids](QSqlDatabase db, QString *error) {
+        for (const QString &id : ids) {
+            if (!exec(db, QStringLiteral("UPDATE schedules SET completed = 0, actual_end = NULL WHERE id = ?"), {id}, error))
+                return false;
+        }
+        return true;
     };
     return m;
 }

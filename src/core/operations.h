@@ -54,6 +54,20 @@ Mutation setOccurrenceTime(const QString &id, const QTime &time);
 // in progress.
 std::optional<Mutation> startWork(const Queries &q, const QString &workLogId, const QString &taskId, qint64 now,
                                   QString *error = nullptr);
+// Puts work starting now on the day [dayStart, dayEnd): the task's open
+// block running now, else its earliest open block that day moved to now,
+// else a new block of its estimate. Nullopt for recurring tasks, which show
+// their occurrence instead.
+std::optional<Mutation> placeWork(const Queries &q, const QString &taskId, const QString &workLogId, qint64 now, qint64 dayStart,
+                                  qint64 dayEnd);
+// Records a task finished now on the day's schedule: its open blocks that day
+// are marked done, none ending later than now. With none, and nothing done
+// that day, a done block is added: its last session today, or its estimate
+// up to now. Nullopt when there's nothing to record, and for recurring tasks.
+std::optional<Mutation> recordDone(const Queries &q, const QString &taskId, qint64 now, qint64 dayStart, qint64 dayEnd);
+// Reopening a task: its blocks done that day are open again. Nullopt when
+// there are none.
+std::optional<Mutation> reopenToday(const Queries &q, const QString &taskId, qint64 dayStart, qint64 dayEnd);
 std::optional<Mutation> stopWork(const Queries &q, qint64 now, QString *error = nullptr);
 // Stops the session as of `endedAt` (clamped between its start and now):
 // used to leave out time spent away from the computer.

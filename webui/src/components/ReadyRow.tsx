@@ -1,11 +1,12 @@
 import clsx from 'clsx'
-import { CalendarPlus, Check, Clock, Flag, Play, Zap } from 'lucide-react'
+import { Check, Clock, Flag, Play, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { call } from '../bridge/hooks'
 import type { Energy, ReadyTask } from '../bridge/types'
 import { dueLabel, duration } from '../lib/format'
 import { useNav } from '../lib/nav'
-import { Button, Chip, IconButton } from './ui'
+import { ScheduleMenu } from './ScheduleDialog'
+import { Button, Chip } from './ui'
 
 export const energyLabel: Record<Energy, string> = { low: 'Low', medium: 'Medium', high: 'High', peak: 'Peak' }
 
@@ -60,9 +61,7 @@ export function ReadyRow({ task }: { task: ReadyTask }) {
         </div>
       </div>
       <div className="flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-        <IconButton label="Schedule in the next free slot" size="sm" onClick={() => call('app', 'scheduleNextSlot', task.id)}>
-          <CalendarPlus className="size-4" />
-        </IconButton>
+        <ScheduleMenu taskId={task.id} title={task.title} estimate={task.estimate} />
         <Button size="sm" variant="soft" icon={<Play className="size-3.5" />} onClick={() => call('app', 'startWork', task.id)}>
           Start
         </Button>

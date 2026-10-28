@@ -196,6 +196,29 @@ private slots:
         QVERIFY(messages.last().first().toString().contains("after its due date"));
     }
 
+    void schedulingAtAChosenTime()
+    {
+        const QString id = m_app->createTask({{"title", "Gym"}, {"time_estimate_minutes", 45}});
+        const qint64 eight = QDateTime(QDate::currentDate().addDays(1), QTime(8, 0)).toMSecsSinceEpoch();
+        QSignalSpy messages(m_app.get(), &AppController::message);
+        QVERIFY(m_app->scheduleAt(id, eight, 45));
+        QVERIFY(messages.last().first().toString().contains("tomorrow"));
+        const QString block = m_app->queries().schedulesForTask(id).first().id;
+
+        // Moved and resized in one step; not counted as a bump.
+        const qint64 nine = eight + 60 * 60000;
+        QVERIFY(m_app->reschedule(block, nine, 30));
+        auto moved = *m_app->queries().schedule(block);
+        QCOMPARE(moved.start, nine);
+        QCOMPARE(moved.end, nine + 30 * 60000);
+        QCOMPARE(moved.bumpedCount, 0);
+        // No length: keeps the one it has.
+        QVERIFY(m_app->reschedule(block, eight, 0));
+        QCOMPARE(m_app->queries().schedule(block)->end, eight + 30 * 60000);
+        m_app->undo();
+        QCOMPARE(m_app->queries().schedule(block)->start, nine);
+    }
+
     void workTimer()
     {
         const QString id = m_app->createTask({{"title", "Write"}});
@@ -207,6 +230,90 @@ private slots:
         QVERIFY(m_app->stopWork());
         QVERIFY(m_app->working().isEmpty());
         QVERIFY(!m_app->stopWork()); // nothing running now
+    }
+
+    void startingPutsWorkOnTheSchedule()
+    {
+        const auto ids = [](const QVariantList &items) {
+            QStringList out;
+            for (const QVariant &v : items)
+                out.append(v.toMap().value("taskId").toString());
+            return out;
+        };
+        const QString id = m_app->createTask({{"title", "Write"}, {"time_estimate_minutes", 25}});
+        const qint64 before = QDateTime::currentMSecsSinceEpoch();
+        QVERIFY(m_app->startWork(id));
+        auto blocks = m_app->queries().schedulesForTask(id);
+        QCOMPARE(blocks.size(), 1);
+        QVERIFY(blocks[0].start >= before);
+        QCOMPARE(blocks[0].end - blocks[0].start, 25 * 60000);
+        QCOMPARE(blocks[0].workLogId, m_app->queries().activeWorkLog()->id);
+        QVERIFY(ids(m_app->today().value("now").toList()).contains(id));
+        QVERIFY(!ids(m_app->today().value("ready").toList()).contains(id));
+
+        // Starting again (after stopping) reuses the block running now.
+        QVERIFY(m_app->stopWork());
+        QVERIFY(m_app->startWork(id));
+        QCOMPARE(m_app->queries().schedulesForTask(id).size(), 1);
+
+        // Done early: the block is done and ends now.
+        QVERIFY(m_app->setTaskStatus(id, "completed"));
+        blocks = m_app->queries().schedulesForTask(id);
+        QCOMPARE(blocks.size(), 1);
+        QVERIFY(blocks[0].completed);
+        QVERIFY(blocks[0].end <= QDateTime::currentMSecsSinceEpoch());
+        QVERIFY(ids(m_app->today().value("done").toList()).contains(id));
+
+        // One undo step each.
+        m_app->undo();
+        QVERIFY(!m_app->queries().schedulesForTask(id)[0].completed);
+        m_app->undo(); // start
+        m_app->undo(); // stop
+        m_app->undo(); // first start
+        QVERIFY(m_app->queries().schedulesForTask(id).isEmpty());
+        QVERIFY(m_app->queries().workLogsForTask(id).isEmpty());
+    }
+
+    void startingMovesTodaysPlannedBlockToNow()
+    {
+        const QDateTime now = QDateTime::currentDateTime();
+        if (now.time() > QTime(22, 0))
+            QSKIP("needs an hour left today");
+        const QString id = m_app->createTask({{"title", "Report"}});
+        QVERIFY(m_app->scheduleAt(id, QDateTime(now.date(), QTime(23, 0)).toMSecsSinceEpoch(), 40));
+        QVERIFY(m_app->startWork(id));
+        const auto blocks = m_app->queries().schedulesForTask(id);
+        QCOMPARE(blocks.size(), 1);
+        QVERIFY(blocks[0].start <= QDateTime::currentMSecsSinceEpoch());
+        QCOMPARE(blocks[0].end - blocks[0].start, 40 * 60000);
+        QCOMPARE(blocks[0].bumpedCount, 0);
+    }
+
+    void doneWithoutStartingShowsAsDone()
+    {
+        const QString id = m_app->createTask({{"title", "Call the dentist"}, {"time_estimate_minutes", 10}});
+        QVERIFY(m_app->setTaskStatus(id, "completed"));
+        auto blocks = m_app->queries().schedulesForTask(id);
+        QCOMPARE(blocks.size(), 1);
+        QVERIFY(blocks[0].completed);
+        QCOMPARE(blocks[0].end - blocks[0].start, 10 * 60000);
+        bool listed = false;
+        for (const QVariant &v : m_app->today().value("done").toList())
+            listed |= v.toMap().value("taskId").toString() == id;
+        QVERIFY(listed);
+
+        // Reopening puts the block back to open; done again reuses it.
+        QVERIFY(m_app->setTaskStatus(id, "pending"));
+        QVERIFY(!m_app->queries().schedulesForTask(id)[0].completed);
+        QVERIFY(m_app->setTaskStatus(id, "completed"));
+        blocks = m_app->queries().schedulesForTask(id);
+        QCOMPARE(blocks.size(), 1);
+        QVERIFY(blocks[0].completed);
+
+        // Routines record done on their occurrence, not with a block.
+        const QString routine = m_app->capture("stretch daily");
+        QVERIFY(m_app->setTaskStatus(routine, "completed"));
+        QVERIFY(m_app->queries().schedulesForTask(routine).isEmpty());
     }
 
     void dependenciesBlockReady()

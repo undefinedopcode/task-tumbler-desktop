@@ -105,6 +105,8 @@ public:
     Q_INVOKABLE bool scheduleNextSlot(const QString &taskId);
     Q_INVOKABLE bool scheduleAt(const QString &taskId, qint64 start, int minutes);
     Q_INVOKABLE bool moveSchedule(const QString &id, qint64 start);
+    // A new time and, when minutes > 0, a new length.
+    Q_INVOKABLE bool reschedule(const QString &id, qint64 start, int minutes);
     Q_INVOKABLE bool bump(const QString &scheduleId, int minutes);
     Q_INVOKABLE bool bumpToNextSlot(const QString &scheduleId);
     Q_INVOKABLE bool bumpToTomorrow(const QString &scheduleId);
