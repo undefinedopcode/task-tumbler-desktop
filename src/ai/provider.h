@@ -27,7 +27,7 @@ struct Result {
     QJsonObject data;
     QString error;    // for the user: short and plain
     bool retryable = false; // malformed answer: worth asking once more
-    QString provider; // "anthropic" / "ollama"
+    QString provider; // "anthropic" / "ollama" / "claude-cli"
     QString model;
     qint64 elapsedMs = 0;
 };
@@ -103,6 +103,37 @@ private:
     QNetworkAccessManager *m_network;
     QUrl m_baseUrl;
     QString m_model;
+};
+
+// Claude through the Claude Code CLI ("claude -p"), signed in however the
+// user's organisation set it up, so no API key is needed. One turn, no
+// tools, no MCP servers, nothing saved; the schema goes to --json-schema
+// and the answer comes back on stdout.
+class ClaudeCliProvider : public Provider
+{
+    Q_OBJECT
+public:
+    // An empty model means the CLI's own default.
+    ClaudeCliProvider(const QString &program, const QString &model = QString(), QObject *parent = nullptr);
+
+    QString id() const override { return QStringLiteral("claude-cli"); }
+    QString model() const override { return m_model; }
+    void send(const Request &request, Callback done) override;
+
+    // The arguments for a request (the prompt goes on stdin). Public for tests.
+    QStringList arguments(const Request &request) const;
+
+    // The claude executable: `configured` if it's set and runs, otherwise
+    // the usual install places, which a GUI app's PATH often leaves out.
+    // Empty when there's none.
+    static QString locate(const QString &configured);
+
+    void setTimeout(int ms) { m_timeoutMs = ms; } // tests
+
+private:
+    QString m_program;
+    QString m_model;
+    int m_timeoutMs = 5 * 60 * 1000;
 };
 
 } // namespace tumbler::ai

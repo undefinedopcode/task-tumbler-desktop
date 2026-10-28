@@ -1,6 +1,6 @@
 # Task Tumbler Desktop
 
-A local, single-user desktop rebuild of [Task Tumbler](../task-tumbler): energy-aware task management and scheduling for ADHD/ASD brains, built with Qt 6 and a React interface in QtWebEngine: one polished look on every platform, with the desktop integration done natively. Data lives in one SQLite file, there is no sign-in, and AI comes from an Anthropic API key, a local Ollama model, or nothing at all.
+A local, single-user desktop rebuild of [Task Tumbler](../task-tumbler): energy-aware task management and scheduling for ADHD/ASD brains, built with Qt 6 and a React interface in QtWebEngine: one polished look on every platform, with the desktop integration done natively. Data lives in one SQLite file, there is no sign-in, and AI comes from an Anthropic API key, a signed-in Claude Code CLI, an Ollama model, or nothing at all.
 
 The architecture and roadmap are in `../task-tumbler/docs/desktop-model.md`.
 
@@ -54,7 +54,8 @@ Phase 2:
 
 - **Plan my day** (Ctrl+P): fills free time with what matters, inside each category's hours and around blocks, events and routines. Demanding work goes in your best hours, easy work outside them, and prerequisites come first. Nothing is scheduled until you review the list, and accepting it is one undoable step. It works fully offline.
 - **Your real pace:** once five or more timed tasks are finished, new blocks allow for how long things like them usually take you. That covers Plan my day, Schedule next slot, dropping a task on the schedule, and captures with a time but no stated estimate. It's learned from the last 90 days, by category, then by estimate size, then overall. Blocks are never made shorter and never more than double the estimate. Plan my day marks them "(est. 30 min)", and you can turn it off in Settings.
-- **AI, optional:** Claude through an Anthropic API key (kept in KWallet), or a local model through Ollama.
+- **AI, optional:** Claude through an Anthropic API key (kept in the keyring); Claude through the Claude Code CLI, for when you're signed in to `claude` (a work account, say) but have no API key: Task Tumbler runs `claude -p` with no tools, no MCP servers and no saved session; or a model through Ollama. Answers are checked against a schema, common shape slips are repaired, and a bad answer is asked for once more. Ollama's cloud models count as off this computer, like Claude.
+- **Trying models for real:** `TUMBLER_LIVE_OLLAMA=kimi-k3:cloud,gemma4:31b-cloud TUMBLER_LIVE_RUNS=3 ./build/tests/tst_ai_live` (or `TUMBLER_LIVE_CLAUDE_CLI=1`) runs a plan, a breakdown and a capture against each and reports what failed. It isn't part of `ctest`.
   - The AI ranks and filters tasks and explains why. The offline planner still computes every time, so a small local model can't produce an impossible schedule.
   - Every answer is checked against a schema, with one retry. If the AI fails, you get the offline plan and the reason.
   - Also available: **Suggest steps** on a task, and **Ask AI** in quick capture (Ctrl+Enter) for messy notes.

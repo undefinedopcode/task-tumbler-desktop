@@ -235,6 +235,7 @@ function AiSection() {
           options={[
             { value: 'off', label: 'No AI' },
             { value: 'anthropic', label: 'Claude (Anthropic API key)' },
+            { value: 'claude_cli', label: 'Claude Code (signed-in CLI)' },
             { value: 'ollama', label: 'A local model (Ollama)' },
           ]}
         />
@@ -259,8 +260,29 @@ function AiSection() {
           <Row label="Model">
             <TextSetting value={a.model ?? ''} onSave={(v) => v && set('ai_model', v)} mono className="w-[240px]" />
           </Row>
-          <Row label="Include task details" description="Off: only titles, times and priorities leave this computer.">
-            <Toggle checked={!!a.shareNotes} onChange={(v) => set('ai_share_notes', v)} />
+        </>
+      )}
+      {a.provider === 'claude_cli' && (
+        <>
+          <Row
+            label="Claude Code"
+            description={
+              a.cliPath ? (
+                <>
+                  Found at <Code>{a.cliPath}</Code>. It answers as whoever is signed in to it; nothing else to set up.
+                </>
+              ) : (
+                <>
+                  Not found. Install Claude Code and sign in with <Code>claude</Code>, or give the path to it.
+                </>
+              )
+            }
+            stacked
+          >
+            <TextSetting value={a.cliConfiguredPath ?? ''} placeholder="Found automatically" onSave={(v) => set('claude_cli_path', v)} mono />
+          </Row>
+          <Row label="Model" description="Empty for its default, or e.g. sonnet, opus, haiku.">
+            <TextSetting value={a.cliModel ?? ''} placeholder="Its default" onSave={(v) => set('claude_cli_model', v)} mono className="w-[240px]" />
           </Row>
         </>
       )}
@@ -287,6 +309,14 @@ function AiSection() {
             </div>
           </Row>
         </>
+      )}
+      {(a.provider === 'anthropic' || a.provider === 'claude_cli' || (a.provider === 'ollama' && a.ollamaCloud)) && (
+        <Row
+          label="Include task details"
+          description={a.provider === 'ollama' ? 'This is an Ollama cloud model, so it runs off this computer. Off: only titles, times and priorities are sent.' : 'Off: only titles, times and priorities leave this computer.'}
+        >
+          <Toggle checked={!!a.shareNotes} onChange={(v) => set('ai_share_notes', v)} />
+        </Row>
       )}
       {a.provider && a.provider !== 'off' && (
         <Row label="Connection" description={a.ready ? `Ready: ${a.label}` : 'Not set up yet.'}>

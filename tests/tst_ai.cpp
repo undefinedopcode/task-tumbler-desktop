@@ -9,6 +9,7 @@
 #include <QSignalSpy>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QTemporaryDir>
 #include <QTest>
 
 using namespace tumbler;
@@ -52,6 +53,46 @@ Result await(Provider &p, const Request &r, bool validated = false)
     if (!QTest::qWaitFor([&] { return done; }, 5000))
         out.error = QStringLiteral("test timed out waiting for the provider");
     return out;
+}
+
+// A stand-in for the claude CLI: records its arguments and stdin next to
+// itself, then prints <script>.reply and exits with <script>.exit (or 0).
+QString fakeClaude(const QTemporaryDir &dir, const QByteArray &reply, const QByteArray &stderrText = {}, int exitCode = 0,
+                   int sleepSeconds = 0)
+{
+    const QString path = dir.filePath(QStringLiteral("claude"));
+    QFile script(path);
+    script.open(QIODevice::WriteOnly);
+    script.write(QStringLiteral("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$0.args\"\ncat > \"$0.stdin\"\nsleep %1\n"
+                                "cat \"$0.reply\"\ncat \"$0.err\" >&2\nexit %2\n")
+                     .arg(sleepSeconds)
+                     .arg(exitCode)
+                     .toUtf8());
+    script.close();
+    script.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+    QFile r(path + QStringLiteral(".reply"));
+    r.open(QIODevice::WriteOnly);
+    r.write(reply);
+    QFile e(path + QStringLiteral(".err"));
+    e.open(QIODevice::WriteOnly);
+    e.write(stderrText);
+    return path;
+}
+
+QByteArray cliResult(const QJsonObject &fields)
+{
+    QJsonObject o{{"type", "result"}, {"subtype", "success"}, {"is_error", false}, {"result", ""},
+                  {"modelUsage", QJsonObject{{"claude-sonnet-5-5", QJsonObject{}}}}};
+    for (auto it = fields.begin(); it != fields.end(); ++it)
+        o.insert(it.key(), it.value());
+    return QJsonDocument(o).toJson(QJsonDocument::Compact) + "\n";
+}
+
+QByteArray readAll(const QString &path)
+{
+    QFile f(path);
+    f.open(QIODevice::ReadOnly);
+    return f.readAll();
 }
 
 } // namespace
@@ -336,6 +377,135 @@ private slots:
         QVERIFY(!p.recurrence); // weekday 9 doesn't exist
         past["recurrence"] = QJsonObject{{"type", "weekly"}, {"interval", 1}, {"days", QJsonArray{}}};
         QCOMPARE(toCapture(past, today).recurrence->days, QList<int>({1})); // defaults to today's weekday
+    }
+    void coercesCommonSlips()
+    {
+        PlanContext c;
+        c.day = QDate(2026, 10, 26);
+        const QJsonObject schema = planRequest(c).schema;
+
+        // notes as a map, order as objects, defer as a map of reasons,
+        // explanation left out: all still mean something clear.
+        const QJsonObject sloppy{
+            {"order", QJsonArray{QJsonObject{{"task_id", "a"}}, "b"}},
+            {"defer", QJsonObject{{"c", QJsonObject{{"reason", "needs energy"}}}}},
+            {"notes", QJsonObject{{"a", "first thing"}, {"b", "quick"}}},
+            {"extra", "dropped"}};
+        const QJsonObject fixed = coerce(sloppy, schema).toObject();
+        QVERIFY2(validate(fixed, schema).isEmpty(), qPrintable(validate(fixed, schema)));
+        const PlanGuidance g = toGuidance(fixed, {"a", "b", "c"});
+        QCOMPARE(g.order, QStringList({"a", "b"}));
+        QCOMPARE(g.defer.value("c"), QStringLiteral("needs energy"));
+        QCOMPARE(g.notes.value("a"), QStringLiteral("first thing"));
+        QCOMPARE(g.notes.value("b"), QStringLiteral("quick"));
+
+        // Wrapped in an outer key, one note given bare instead of in a list.
+        const QJsonObject wrapped{{"plan", QJsonObject{{"order", QJsonArray{"a"}},
+                                                       {"defer", QJsonArray{}},
+                                                       {"notes", QJsonObject{{"task_id", "a"}, {"note", "go"}}},
+                                                       {"explanation", "ok"}}}};
+        const QJsonObject unwrapped = coerce(wrapped, schema).toObject();
+        QVERIFY2(validate(unwrapped, schema).isEmpty(), qPrintable(validate(unwrapped, schema)));
+        QCOMPARE(toGuidance(unwrapped, {"a"}).notes.value("a"), QStringLiteral("go"));
+
+        // Numbers as text, enums in the wrong case, a string for a list.
+        const Request capture = captureRequest("x", c.day, {});
+        const QJsonObject loose{{"title", "Dentist"},     {"priority", "High"},  {"energy", " LOW "},
+                                {"estimate_minutes", "30 min"}, {"date", ""},     {"time", ""},
+                                {"tags", "health"},       {"category", ""},
+                                {"recurrence", QJsonObject{{"type", "none"}, {"interval", "1"}, {"days", QJsonValue()}}}};
+        const QJsonObject tidy = coerce(loose, capture.schema).toObject();
+        QVERIFY2(validate(tidy, capture.schema).isEmpty(), qPrintable(validate(tidy, capture.schema)));
+        QCOMPARE(tidy.value("priority").toString(), QStringLiteral("high"));
+        QCOMPARE(tidy.value("energy").toString(), QStringLiteral("low"));
+        QCOMPARE(tidy.value("estimate_minutes").toInt(), 30);
+        QCOMPARE(tidy.value("tags").toArray(), QJsonArray({"health"}));
+
+        // What can't be repaired is still reported.
+        QVERIFY(!validate(coerce(QJsonObject{{"priority", "sometime"}}, capture.schema), capture.schema).isEmpty());
+        QVERIFY(!validate(coerce(QJsonObject{}, schema), schema).isEmpty());
+    }
+
+    void schemaExample()
+    {
+        PlanContext c;
+        const QJsonObject e = QJsonDocument::fromJson(example(planRequest(c).schema).toUtf8()).object();
+        QCOMPARE(e.value("order").toArray(), QJsonArray({"text"}));
+        QCOMPARE(e.value("notes").toArray().first().toObject().keys(), QStringList({"note", "task_id"}));
+        const QJsonObject s = QJsonDocument::fromJson(example(breakdownRequest(Task(), {}, false, {}).schema).toUtf8()).object();
+        QCOMPARE(s.value("steps").toArray().first().toObject().value("energy").toString(), QStringLiteral("one of: low, medium, high, peak"));
+
+        // Ollama gets it in the prompt as well as in `format`.
+        OllamaProvider local(&m_net, QUrl("http://localhost:1"), "m");
+        const QString prompt = local.body(planRequest(c)).value("messages").toArray().last().toObject().value("content").toString();
+        QVERIFY(prompt.contains("\"task_id\": \"text\""));
+    }
+
+    void claudeCli()
+    {
+        QTemporaryDir dir;
+        const QString program = fakeClaude(dir, cliResult({{"result", "{\"answer\":42}"}, {"structured_output", QJsonObject{{"answer", 42}}}}));
+        ClaudeCliProvider cli(program, "sonnet");
+        const Result r = await(cli, simpleRequest());
+        QVERIFY2(r.ok, qPrintable(r.error));
+        QCOMPARE(r.data.value("answer").toInt(), 42);
+        QCOMPARE(r.provider, QStringLiteral("claude-cli"));
+        QCOMPARE(r.model, QStringLiteral("claude-sonnet-5-5"));
+
+        QCOMPARE(readAll(program + ".stdin"), QByteArray("hello")); // the prompt on stdin, not argv
+        const QStringList args = QString::fromUtf8(readAll(program + ".args")).split('\n');
+        QCOMPARE(args.first(), QStringLiteral("-p"));
+        QCOMPARE(args.at(args.indexOf("--output-format") + 1), QStringLiteral("json"));
+        QCOMPARE(QJsonDocument::fromJson(args.at(args.indexOf("--json-schema") + 1).toUtf8()).object(), simpleRequest().schema);
+        QCOMPARE(args.at(args.indexOf("--system-prompt") + 1), QStringLiteral("sys"));
+        QCOMPARE(args.at(args.indexOf("--tools") + 1), QString()); // no tools at all
+        QCOMPARE(args.at(args.indexOf("--model") + 1), QStringLiteral("sonnet"));
+        QVERIFY(args.contains("--strict-mcp-config"));
+        QVERIFY(args.contains("--no-session-persistence"));
+        QVERIFY(!ClaudeCliProvider(program).arguments(simpleRequest()).contains("--model")); // the CLI's default
+
+        // No structured_output: the text answer is read instead.
+        QTemporaryDir d2;
+        ClaudeCliProvider text(fakeClaude(d2, cliResult({{"result", "Here you go:\n```json\n{\"answer\": 3}\n```"}})));
+        const Result t = await(text, simpleRequest());
+        QVERIFY2(t.ok, qPrintable(t.error));
+        QCOMPARE(t.data.value("answer").toInt(), 3);
+    }
+
+    void claudeCliFailures()
+    {
+        QTemporaryDir d1;
+        ClaudeCliProvider loggedOut(fakeClaude(d1, cliResult({{"is_error", true}, {"result", "Not logged in · Please run /login"}}), {}, 1));
+        const Result a = await(loggedOut, simpleRequest());
+        QVERIFY(!a.ok);
+        QVERIFY2(a.error.contains("Not logged in"), qPrintable(a.error));
+
+        QTemporaryDir d2;
+        ClaudeCliProvider broken(fakeClaude(d2, {}, "error: unknown option '--json-schema'\nmore", 1));
+        const Result b = await(broken, simpleRequest());
+        QVERIFY(!b.ok);
+        QVERIFY2(b.error.contains("unknown option"), qPrintable(b.error));
+
+        QTemporaryDir none;
+        ClaudeCliProvider missing(none.filePath("no-such-claude"));
+        const Result c = await(missing, simpleRequest());
+        QVERIFY(!c.ok);
+        QVERIFY2(c.error.contains("couldn't start"), qPrintable(c.error));
+
+        QTemporaryDir d3;
+        ClaudeCliProvider slow(fakeClaude(d3, cliResult({}), {}, 0, 5));
+        slow.setTimeout(300);
+        const Result s = await(slow, simpleRequest());
+        QVERIFY(!s.ok);
+        QVERIFY2(s.error.contains("too long"), qPrintable(s.error));
+    }
+
+    void claudeCliLocate()
+    {
+        QTemporaryDir d;
+        const QString program = fakeClaude(d, {});
+        QCOMPARE(ClaudeCliProvider::locate(program), program);
+        QCOMPARE(ClaudeCliProvider::locate(d.filePath("nothing-here")), QString());
     }
 };
 

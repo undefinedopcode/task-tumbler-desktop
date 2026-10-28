@@ -75,13 +75,21 @@ QVariantMap AppController::ai() const
     const QString provider = q.setting(QStringLiteral("ai_provider"), QStringLiteral("off")).toString();
     const QString model = q.setting(QStringLiteral("ai_model"), QString::fromLatin1(ai::AnthropicProvider::kDefaultModel)).toString();
     const QString ollamaModel = q.setting(QStringLiteral("ollama_model"), QString()).toString();
+    // Ollama's cloud models ("kimi-k3:cloud", "gemma4:31b-cloud") run on its servers.
+    const bool ollamaCloud = ollamaModel.endsWith(QLatin1String(":cloud")) || ollamaModel.endsWith(QLatin1String("-cloud"));
+    const QString cliConfigured = q.setting(QStringLiteral("claude_cli_path"), QString()).toString();
+    const QString cliModel = q.setting(QStringLiteral("claude_cli_model"), QString()).toString();
+    const QString cliPath = provider == QLatin1String("claude_cli") ? ai::ClaudeCliProvider::locate(cliConfigured) : QString();
     const bool ready = (provider == QLatin1String("anthropic") && !m_apiKey.isEmpty())
-        || (provider == QLatin1String("ollama") && !ollamaModel.isEmpty());
+        || (provider == QLatin1String("ollama") && !ollamaModel.isEmpty())
+        || (provider == QLatin1String("claude_cli") && !cliPath.isEmpty());
     QString label;
     if (provider == QLatin1String("anthropic"))
         label = QStringLiteral("Claude (%1)").arg(model);
     else if (provider == QLatin1String("ollama"))
         label = ollamaModel.isEmpty() ? QStringLiteral("Ollama") : QStringLiteral("Ollama (%1)").arg(ollamaModel);
+    else if (provider == QLatin1String("claude_cli"))
+        label = cliModel.isEmpty() ? QStringLiteral("Claude Code") : QStringLiteral("Claude Code (%1)").arg(cliModel);
     return {
         {QStringLiteral("provider"), provider},
         {QStringLiteral("ready"), ready},
@@ -92,7 +100,11 @@ QVariantMap AppController::ai() const
         {QStringLiteral("ollamaUrl"), q.setting(QStringLiteral("ollama_url"), QStringLiteral("http://localhost:11434")).toString()},
         {QStringLiteral("ollamaModel"), ollamaModel},
         {QStringLiteral("shareNotes"), q.setting(QStringLiteral("ai_share_notes"), false).toBool()},
-        {QStringLiteral("local"), provider == QLatin1String("ollama")},
+        {QStringLiteral("local"), provider == QLatin1String("ollama") && !ollamaCloud},
+        {QStringLiteral("ollamaCloud"), ollamaCloud},
+        {QStringLiteral("cliPath"), cliPath},
+        {QStringLiteral("cliConfiguredPath"), cliConfigured},
+        {QStringLiteral("cliModel"), cliModel},
     };
 }
 
@@ -106,12 +118,15 @@ ai::Provider *AppController::provider()
     }
     const QString kind = a.value(QStringLiteral("provider")).toString();
     const QString signature = QStringList{kind, a.value(QStringLiteral("model")).toString(), a.value(QStringLiteral("ollamaUrl")).toString(),
-                                          a.value(QStringLiteral("ollamaModel")).toString(),
+                                          a.value(QStringLiteral("ollamaModel")).toString(), a.value(QStringLiteral("cliPath")).toString(),
+                                          a.value(QStringLiteral("cliModel")).toString(),
                                           QString::fromLatin1(QCryptographicHash::hash(m_apiKey.toUtf8(), QCryptographicHash::Sha256).toHex())}
                                   .join(QLatin1Char('|'));
     if (signature != m_providerSignature || !m_provider) {
         if (kind == QLatin1String("anthropic"))
             m_provider = std::make_unique<ai::AnthropicProvider>(&m_network, m_apiKey, a.value(QStringLiteral("model")).toString());
+        else if (kind == QLatin1String("claude_cli"))
+            m_provider = std::make_unique<ai::ClaudeCliProvider>(a.value(QStringLiteral("cliPath")).toString(), a.value(QStringLiteral("cliModel")).toString());
         else
             m_provider = std::make_unique<ai::OllamaProvider>(&m_network, QUrl(a.value(QStringLiteral("ollamaUrl")).toString()),
                                                               a.value(QStringLiteral("ollamaModel")).toString());

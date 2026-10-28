@@ -201,7 +201,7 @@ export interface ProposedStep {
 }
 
 export interface AiState {
-  provider?: 'off' | 'anthropic' | 'ollama'
+  provider?: 'off' | 'anthropic' | 'ollama' | 'claude_cli'
   ready?: boolean
   busy?: boolean
   label?: string
@@ -276,6 +276,10 @@ export interface AiSettings extends AiState {
   ollamaModel?: string
   shareNotes?: boolean
   local?: boolean
+  ollamaCloud?: boolean
+  cliPath?: string
+  cliConfiguredPath?: string
+  cliModel?: string
 }
 
 export interface Feed {

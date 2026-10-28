@@ -42,7 +42,8 @@ class AppController : public QObject
     Q_PROPERTY(bool needsOnboarding READ needsOnboarding NOTIFY onboardingChanged)
     Q_PROPERTY(QVariantMap settings READ settings NOTIFY settingsChanged)
     Q_PROPERTY(QString dataPath READ dataPath CONSTANT)
-    // {provider: "off"|"anthropic"|"ollama", ready, busy, label, hasKey, model, ollamaUrl, ollamaModel, shareNotes}
+    // {provider: "off"|"anthropic"|"ollama"|"claude_cli", ready, busy, label, hasKey, model, ollamaUrl, ollamaModel,
+    //  ollamaCloud, cliPath (found), cliConfiguredPath, cliModel, shareNotes, local}
     Q_PROPERTY(QVariantMap ai READ ai NOTIFY aiChanged)
     // Latest check-in today: {level, at, label}; empty if none. `due` is set
     // when it's been a while and a gentle prompt is appropriate.

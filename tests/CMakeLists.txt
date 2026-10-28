@@ -68,3 +68,7 @@ if(BUILD_APP)
     target_link_libraries(tst_syncclients PRIVATE tumbler-sync Qt6::Test)
     add_test(NAME tst_syncclients COMMAND tst_syncclients)
 endif()
+
+# Against real models, on request only (see the file): never in CI.
+qt_add_executable(tst_ai_live tst_ai_live.cpp)
+target_link_libraries(tst_ai_live PRIVATE tumbler-ai Qt6::Test)

@@ -63,7 +63,9 @@ QJsonObject taskJson(const Task &t, bool includeNotes, const QString &categoryTe
     if (!categoryText.isEmpty())
         o.insert(QStringLiteral("category"), categoryText);
     if (includeNotes && !t.description.isEmpty())
-        o.insert(QStringLiteral("notes"), t.description.left(500));
+        // Not "notes": the plan's answer has a notes list, and local models
+        // mixed the two up.
+        o.insert(QStringLiteral("description"), t.description.left(500));
     return o;
 }
 
@@ -92,9 +94,11 @@ void runValidated(Provider *provider, const Request &request, Callback done)
                 done(r);
                 return;
             }
-            const QString problem = validate(r.data, req.schema);
+            Result repaired = r;
+            repaired.data = coerce(r.data, req.schema).toObject();
+            const QString problem = validate(repaired.data, req.schema);
             if (problem.isEmpty()) {
-                done(r);
+                done(repaired);
                 return;
             }
             if (tries >= 1) {

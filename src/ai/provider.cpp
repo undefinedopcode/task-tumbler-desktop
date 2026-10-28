@@ -1,12 +1,19 @@
 #include "provider.h"
 
+#include "jsonschema.h"
+
+#include <QDir>
 #include <QElapsedTimer>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QProcess>
 #include <QRegularExpression>
+#include <QStandardPaths>
+#include <QTimer>
 #include <optional>
 
 namespace tumbler::ai {
@@ -202,6 +209,12 @@ OllamaProvider::OllamaProvider(QNetworkAccessManager *network, const QUrl &baseU
 
 QJsonObject OllamaProvider::body(const Request &request) const
 {
+    // `format` constrains the answer only where the model and Ollama honour
+    // it (cloud models may not), so the prompt shows the shape as well.
+    const QString prompt = request.prompt
+        + QStringLiteral("\n\nAnswer with only a JSON object, no other text, shaped exactly like this example "
+                         "(the values are placeholders; lists can have any number of items, including none):\n%1")
+              .arg(example(request.schema));
     return QJsonObject{
         {QStringLiteral("model"), m_model},
         {QStringLiteral("stream"), false},
@@ -209,7 +222,7 @@ QJsonObject OllamaProvider::body(const Request &request) const
         {QStringLiteral("messages"),
          QJsonArray{
              QJsonObject{{QStringLiteral("role"), QStringLiteral("system")}, {QStringLiteral("content"), request.system}},
-             QJsonObject{{QStringLiteral("role"), QStringLiteral("user")}, {QStringLiteral("content"), request.prompt}},
+             QJsonObject{{QStringLiteral("role"), QStringLiteral("user")}, {QStringLiteral("content"), prompt}},
          }},
         {QStringLiteral("options"),
          QJsonObject{
@@ -285,6 +298,155 @@ void OllamaProvider::listModels(QNetworkAccessManager *network, const QUrl &base
         models.sort();
         done(models, {});
     });
+}
+
+// ---- Claude Code CLI -----------------------------------------------------------
+
+ClaudeCliProvider::ClaudeCliProvider(const QString &program, const QString &model, QObject *parent)
+    : Provider(parent)
+    , m_program(program)
+    , m_model(model.trimmed())
+{
+}
+
+QStringList ClaudeCliProvider::arguments(const Request &request) const
+{
+    QStringList args{
+        QStringLiteral("-p"),
+        QStringLiteral("--output-format"), QStringLiteral("json"),
+        QStringLiteral("--json-schema"), QString::fromUtf8(QJsonDocument(request.schema).toJson(QJsonDocument::Compact)),
+        QStringLiteral("--system-prompt"), request.system,
+        // A question, not a coding session: no tools, none of the user's MCP
+        // servers (this app's own among them), no project settings, no
+        // session left behind in their history.
+        QStringLiteral("--tools"), QString(),
+        QStringLiteral("--strict-mcp-config"),
+        QStringLiteral("--setting-sources"), QStringLiteral("user"),
+        QStringLiteral("--no-session-persistence"),
+    };
+    if (!m_model.isEmpty())
+        args << QStringLiteral("--model") << m_model;
+    return args;
+}
+
+QString ClaudeCliProvider::locate(const QString &configured)
+{
+    const QString c = configured.trimmed();
+    if (!c.isEmpty()) {
+        const QFileInfo info(QDir::fromNativeSeparators(c.startsWith(QLatin1Char('~')) ? QDir::homePath() + c.mid(1) : c));
+        if (info.isFile() && info.isExecutable())
+            return info.absoluteFilePath();
+        return QStandardPaths::findExecutable(c);
+    }
+    if (const QString onPath = QStandardPaths::findExecutable(QStringLiteral("claude")); !onPath.isEmpty())
+        return onPath;
+    // Apps started from the Dock or a desktop menu get a minimal PATH.
+    const QString home = QDir::homePath();
+    return QStandardPaths::findExecutable(QStringLiteral("claude"),
+                                          {home + QStringLiteral("/.local/bin"), home + QStringLiteral("/.claude/local"),
+                                           home + QStringLiteral("/.npm-global/bin"), home + QStringLiteral("/.bun/bin"),
+                                           home + QStringLiteral("/.volta/bin"), QStringLiteral("/opt/homebrew/bin"),
+                                           QStringLiteral("/usr/local/bin")});
+}
+
+void ClaudeCliProvider::send(const Request &request, Callback done)
+{
+    auto *process = new QProcess(this);
+    process->setProgram(m_program);
+    process->setArguments(arguments(request));
+    // Somewhere without a CLAUDE.md or project settings of its own.
+    const QString dir = QDir::tempPath() + QStringLiteral("/tumbler-claude");
+    QDir().mkpath(dir);
+    process->setWorkingDirectory(dir);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    // Started from inside a Claude Code session, these would make it act as a nested one.
+    env.remove(QStringLiteral("CLAUDECODE"));
+    env.remove(QStringLiteral("CLAUDE_CODE_ENTRYPOINT"));
+    // An npm install is a node script; a GUI app's PATH may not have node.
+    QStringList path = env.value(QStringLiteral("PATH")).split(QDir::listSeparator(), Qt::SkipEmptyParts);
+    for (const QString &extra : {QFileInfo(m_program).absolutePath(), QStringLiteral("/opt/homebrew/bin"), QStringLiteral("/usr/local/bin")}) {
+        if (!path.contains(extra))
+            path.append(extra);
+    }
+    env.insert(QStringLiteral("PATH"), path.join(QDir::listSeparator()));
+    process->setProcessEnvironment(env);
+
+    auto timer = std::make_shared<QElapsedTimer>();
+    timer->start();
+    auto finished = std::make_shared<bool>(false);
+    const QString model = m_model;
+    const auto finish = [process, done, timer, finished, model](Result r) {
+        if (*finished)
+            return;
+        *finished = true;
+        r.provider = QStringLiteral("claude-cli");
+        if (r.model.isEmpty())
+            r.model = model;
+        r.elapsedMs = timer->elapsed();
+        process->deleteLater();
+        done(r);
+    };
+
+    auto *deadline = new QTimer(process);
+    deadline->setSingleShot(true);
+    connect(deadline, &QTimer::timeout, process, [process, finish] {
+        Result r;
+        r.error = QStringLiteral("Claude Code took too long to answer");
+        finish(r);
+        process->kill();
+    });
+
+    connect(process, &QProcess::errorOccurred, process, [process, finish](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart)
+            return; // a crash also ends in finished()
+        Result r;
+        r.error = QStringLiteral("couldn't start Claude Code (%1)").arg(process->errorString());
+        finish(r);
+    });
+
+    connect(process, &QProcess::finished, process, [process, finish](int exitCode) {
+        Result r;
+        const QByteArray out = process->readAllStandardOutput().trimmed();
+        // One JSON object; take the last line in case anything came before it.
+        QJsonObject envelope = QJsonDocument::fromJson(out).object();
+        if (envelope.isEmpty())
+            envelope = QJsonDocument::fromJson(out.mid(out.lastIndexOf('\n') + 1)).object();
+        if (envelope.isEmpty()) {
+            const QString err = QString::fromUtf8(process->readAllStandardError()).trimmed();
+            r.error = QStringLiteral("Claude Code didn't answer (%1)")
+                          .arg(!err.isEmpty() ? err.section(QLatin1Char('\n'), 0, 0).left(200) : QStringLiteral("exit code %1").arg(exitCode));
+            finish(r);
+            return;
+        }
+        const QJsonObject usage = envelope.value(QLatin1String("modelUsage")).toObject();
+        if (!usage.isEmpty())
+            r.model = usage.keys().constFirst();
+        const QString text = envelope.value(QLatin1String("result")).toString();
+        if (envelope.value(QLatin1String("is_error")).toBool() || envelope.value(QLatin1String("subtype")) != QLatin1String("success")) {
+            // "Not logged in · Please run /login", "Invalid API key", ...
+            const QString why = text.trimmed().section(QLatin1Char('\n'), 0, 0).left(200);
+            r.error = QStringLiteral("Claude Code: %1").arg(why.isEmpty() ? envelope.value(QLatin1String("subtype")).toString() : why);
+            finish(r);
+            return;
+        }
+        const QJsonValue structured = envelope.value(QLatin1String("structured_output"));
+        if (structured.isObject()) {
+            r.data = structured.toObject();
+        } else {
+            r.data = extractJsonObject(text, &r.error);
+            r.retryable = !r.error.isEmpty();
+        }
+        r.ok = r.error.isEmpty();
+        finish(r);
+    });
+
+    const QByteArray prompt = request.prompt.toUtf8();
+    connect(process, &QProcess::started, process, [process, prompt] {
+        process->write(prompt);
+        process->closeWriteChannel();
+    });
+    deadline->start(m_timeoutMs);
+    process->start();
 }
 
 } // namespace tumbler::ai
