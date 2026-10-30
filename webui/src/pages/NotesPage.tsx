@@ -179,6 +179,10 @@ function NoteEditor({ noteId, onGone }: { noteId: string; onGone: () => void }) 
   const latest = useRef({ title, content })
   latest.current = { title, content }
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  // The page passes a new onGone each render (every search keystroke); a
+  // dependency on it would reload the note and pull focus into it.
+  const gone = useRef(onGone)
+  gone.current = onGone
   const titleRef = useRef<HTMLInputElement>(null)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const taskChoices = useQuery<{ id: string; title: string }[]>('app', 'noteTaskChoices', [], [])
@@ -198,7 +202,7 @@ function NoteEditor({ noteId, onGone }: { noteId: string; onGone: () => void }) 
   const load = useCallback(
     async (first: boolean) => {
       const fresh = await call<NoteDetail>('app', 'noteDetail', noteId)
-      if (!fresh.id) return onGone()
+      if (!fresh.id) return gone.current()
       setNote(fresh)
       // Changed elsewhere (an undo, say): take it, unless there are edits here.
       if (first || !dirty.current) {
@@ -212,7 +216,7 @@ function NoteEditor({ noteId, onGone }: { noteId: string; onGone: () => void }) 
         })
       }
     },
-    [noteId, onGone],
+    [noteId],
   )
   useEffect(() => {
     load(true)
