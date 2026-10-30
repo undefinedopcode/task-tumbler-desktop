@@ -323,6 +323,7 @@ export function createMock(): Objects {
   app.stepsReady = signal()
   app.aiFailed = signal()
   app.commandNeedsApproval = signal()
+  app.timeCheckNeeded = signal()
 
   app.dayAgenda = (iso: string, cb: any) => {
     const start = new Date(`${iso}T00:00:00`).getTime()

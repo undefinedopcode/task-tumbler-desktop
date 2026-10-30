@@ -287,6 +287,7 @@ void AppController::refreshToday()
         {QStringLiteral("closeOutDue"), closeOutDue()},
         {QStringLiteral("reviewDue"), reviewDue()},
         {QStringLiteral("calendarChanges"), calendarChanges()},
+        {QStringLiteral("timeChecks"), timeChecks()},
     };
     Q_EMIT todayChanged();
 
@@ -482,12 +483,30 @@ bool AppController::setTaskStatus(const QString &id, const QString &status)
         schedule = ops::recordDone(queries(), id, at, dayStart, dayEnd);
     else if (m && before && !isFinished(*s) && isFinished(before->status))
         schedule = ops::reopenToday(queries(), id, dayStart, dayEnd);
-    if (schedule)
-        m = combine(m->text, {*m, *schedule});
+    // Ticked off without Start: the time since its block today started.
+    Untracked work;
+    if (m && before && *s == TaskStatus::Completed && !isFinished(before->status) && !before->isRecurring()) {
+        std::optional<ScheduleBlock> due;
+        for (const ScheduleBlock &b : queries().schedulesForTask(id)) {
+            if (!b.completed && b.end > dayStart && b.start <= at && (!due || b.start < due->start))
+                due = b;
+        }
+        if (due)
+            work = untracked(id, due->id, due->start, int((due->end - due->start) / kMinute), at);
+    }
+    if (m && (schedule || work.log)) {
+        QList<Mutation> parts{*m};
+        if (schedule)
+            parts.append(*schedule);
+        if (work.log)
+            parts.append(*work.log);
+        m = combine(m->text, parts);
+    }
     const bool ok = apply(m, error);
     if (ok && *s == TaskStatus::Completed) {
         if (const auto t = queries().task(id))
-            Q_EMIT message(QStringLiteral("Done: %1").arg(t->title));
+            Q_EMIT message(work.log ? QStringLiteral("Done: %1. Logged %2 min.").arg(t->title).arg(work.minutes) : QStringLiteral("Done: %1").arg(t->title));
+        askUntracked(work);
     }
     return ok;
 }
@@ -755,9 +774,18 @@ void AppController::noteMove(const QString &scheduleId)
 bool AppController::completeSchedule(const QString &id)
 {
     QString error;
-    const bool ok = apply(ops::completeSchedule(queries(), id, now(), &error), error);
-    if (ok)
-        Q_EMIT message(QStringLiteral("Nice. Done."));
+    const qint64 at = now();
+    auto m = ops::completeSchedule(queries(), id, at, &error);
+    Untracked work;
+    if (const auto b = queries().schedule(id); m && b && !b->completed && b->start <= at)
+        work = untracked(b->taskId, id, b->start, int((b->end - b->start) / kMinute), at);
+    if (work.log)
+        m = combine(m->text, {*m, *work.log});
+    const bool ok = apply(m, error);
+    if (ok) {
+        Q_EMIT message(work.log ? QStringLiteral("Nice. Done. Logged %1 min.").arg(work.minutes) : QStringLiteral("Nice. Done."));
+        askUntracked(work);
+    }
     return ok;
 }
 
@@ -772,7 +800,26 @@ bool AppController::setOccurrence(const QString &id, const QString &status)
     if (!s)
         return false;
     QString error;
-    return apply(ops::setOccurrenceStatus(queries(), id, *s, now(), &error), error);
+    const qint64 at = now();
+    auto m = ops::setOccurrenceStatus(queries(), id, *s, at, &error);
+    // A routine with a time, ticked off: the time since it was due.
+    Untracked work;
+    const auto occ = queries().occurrence(id);
+    if (m && occ && *s == OccurrenceStatus::Completed && occ->status == OccurrenceStatus::Pending) {
+        if (const auto task = queries().task(occ->taskId)) {
+            const QTime time = occ->scheduledTime.isValid() ? occ->scheduledTime : task->scheduledTime;
+            if (time.isValid())
+                work = untracked(task->id, {}, QDateTime(occ->date, time, zone()).toMSecsSinceEpoch(), task->estimateMinutes, at);
+        }
+    }
+    if (work.log)
+        m = combine(m->text, {*m, *work.log});
+    const bool ok = apply(m, error);
+    if (ok && work.log)
+        Q_EMIT message(QStringLiteral("Done. Logged %1 min.").arg(work.minutes));
+    if (ok)
+        askUntracked(work);
+    return ok;
 }
 
 QVariantMap AppController::dayAgenda(const QString &isoDate) const

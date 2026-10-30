@@ -20,6 +20,7 @@ qt_add_library(tumbler-core STATIC
     dayplanner.h dayplanner.cpp
     sync.h sync.cpp
     calendarchanges.h calendarchanges.cpp
+    worktime.h worktime.cpp
     notes.h notes.cpp
     stats.h stats.cpp
     review.h review.cpp

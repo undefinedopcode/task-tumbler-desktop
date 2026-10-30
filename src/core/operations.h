@@ -72,6 +72,9 @@ std::optional<Mutation> stopWork(const Queries &q, qint64 now, QString *error = 
 // Stops the session as of `endedAt` (clamped between its start and now):
 // used to leave out time spent away from the computer.
 std::optional<Mutation> stopWorkAt(const Queries &q, qint64 endedAt, qint64 now, QString *error = nullptr);
+// Logs a finished session after the fact (for work ticked off without
+// Start). With a block, the block is moved to cover it and linked to it.
+Mutation logWork(const QString &taskId, const QString &workLogId, qint64 start, qint64 end, const QString &blockId, qint64 now);
 
 // Launchers. A command's target must be a non-empty JSON array of strings.
 std::optional<Mutation> addAction(const Queries &q, const TaskAction &action, qint64 now, QString *error = nullptr);

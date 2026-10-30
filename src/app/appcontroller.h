@@ -1,6 +1,7 @@
 #pragma once
 
 #include "calendarchanges.h"
+#include "worktime.h"
 #include "captureparser.h"
 #include "database.h"
 #include "dayplanner.h"
@@ -282,6 +283,15 @@ public:
     // When the working day starts: the earliest category window that day.
     std::optional<qint64> workStart(QDate day) const;
 
+    // --- work ticked off without Start (appcontroller_worktime.cpp) -----------
+    // Done after its planned start with no session: the time since the start
+    // is logged when it's about what was planned; otherwise it waits here
+    // for "how long did it take?" (timeCheckNeeded).
+    QVariantList timeChecks() const;
+    // Logs `minutes` for the check (from its planned start), or with 0 logs
+    // nothing; either way it's answered.
+    Q_INVOKABLE bool resolveTimeCheck(const QString &id, int minutes);
+
 Q_SIGNALS:
     void changed(const QStringList &tables);
     void todayChanged();
@@ -317,8 +327,21 @@ Q_SIGNALS:
     // Bounce the Dock icon / flash the taskbar; urgent keeps it up until the
     // app is looked at.
     void attentionRequested(bool urgent);
+    // Something was ticked off long after it was due to start: ask how long
+    // it took (the check as timeChecks() shows it).
+    void timeCheckNeeded(const QVariantMap &check);
 
 private:
+    // Work done on something ticked off without Start: logged straight away
+    // (`log`, `minutes`), or to ask about (`ask`).
+    struct Untracked {
+        std::optional<Mutation> log;
+        std::optional<TimeCheck> ask;
+        int minutes = 0;
+    };
+    Untracked untracked(const QString &taskId, const QString &blockId, qint64 start, int plannedMinutes, qint64 at) const;
+    // After the Done is applied: queue and announce the question, if any.
+    void askUntracked(const Untracked &u);
     void refresh(const QSet<QString> &tables);
     void refreshToday();
     // After the close-out time and not closed yet today (Settings > Close out).

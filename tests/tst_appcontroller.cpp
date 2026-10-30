@@ -379,6 +379,91 @@ private slots:
         QVERIFY(m_app->queries().schedulesForTask(routine).isEmpty());
     }
 
+    void tickedOffWithoutStartLogsTheTime()
+    {
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        if (QTime::currentTime() < QTime(2, 0))
+            QSKIP("needs two hours of today behind it");
+        constexpr qint64 min = 60000;
+
+        // About as planned: logged from the block's start, the block follows.
+        const QString id = m_app->createTask({{"title", "Inbox zero"}, {"time_estimate_minutes", 30}});
+        QVERIFY(m_app->scheduleAt(id, now - 20 * min, 30));
+        QVERIFY(m_app->setTaskStatus(id, "completed"));
+        auto logs = m_app->queries().workLogsForTask(id);
+        QCOMPARE(logs.size(), 1);
+        QCOMPARE(logs[0].startedAt, now - 20 * min);
+        QVERIFY(qAbs(*logs[0].durationMinutes - 20) <= 1);
+        auto blocks = m_app->queries().schedulesForTask(id);
+        QCOMPARE(blocks.size(), 1);
+        QCOMPARE(blocks[0].workLogId, logs[0].id);
+        QVERIFY(blocks[0].end >= now);
+        QVERIFY(m_app->timeChecks().isEmpty());
+
+        // With Start pressed, the timer has it: nothing more is logged.
+        const QString timed = m_app->createTask({{"title", "Timed"}, {"time_estimate_minutes", 30}});
+        QVERIFY(m_app->scheduleAt(timed, now - 10 * min, 30));
+        QVERIFY(m_app->startWork(timed));
+        QVERIFY(m_app->setTaskStatus(timed, "completed"));
+        QCOMPARE(m_app->queries().workLogsForTask(timed).size(), 1);
+
+        // Done from the schedule block works the same way.
+        const QString block = m_app->createTask({{"title", "Water plants"}, {"time_estimate_minutes", 10}});
+        QVERIFY(m_app->scheduleAt(block, now - 8 * min, 10));
+        QVERIFY(m_app->completeSchedule(m_app->queries().schedulesForTask(block)[0].id));
+        QCOMPARE(m_app->queries().workLogsForTask(block).size(), 1);
+    }
+
+    void tickedOffLongAfterAsksHowLong()
+    {
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        if (QTime::currentTime() < QTime(2, 0))
+            QSKIP("needs two hours of today behind it");
+        constexpr qint64 min = 60000;
+        QSignalSpy asked(m_app.get(), &AppController::timeCheckNeeded);
+
+        // Five minutes planned, ticked an hour later: ask, don't log.
+        const QString id = m_app->createTask({{"title", "Take meds"}, {"time_estimate_minutes", 5}});
+        QVERIFY(m_app->scheduleAt(id, now - 60 * min, 5));
+        QVERIFY(m_app->setTaskStatus(id, "completed"));
+        QVERIFY(m_app->queries().workLogsForTask(id).isEmpty());
+        QCOMPARE(asked.size(), 1);
+        const QVariantList checks = m_app->timeChecks();
+        QCOMPARE(checks.size(), 1);
+        const QVariantMap check = checks[0].toMap();
+        QCOMPARE(check.value("planned").toInt(), 5);
+        QCOMPARE(check.value("elapsed").toInt(), 60);
+        QCOMPARE(m_app->today().value("timeChecks").toList().size(), 1);
+
+        // "As planned": five minutes from the start, and the block covers them.
+        QVERIFY(m_app->resolveTimeCheck(check.value("id").toString(), 5));
+        auto logs = m_app->queries().workLogsForTask(id);
+        QCOMPARE(logs.size(), 1);
+        QCOMPARE(logs[0].startedAt, now - 60 * min);
+        QCOMPARE(*logs[0].durationMinutes, 5);
+        QCOMPARE(m_app->queries().schedulesForTask(id)[0].workLogId, logs[0].id);
+        QVERIFY(m_app->timeChecks().isEmpty());
+
+        // Undo brings the question back; "don't log" just answers it.
+        m_app->undo();
+        QVERIFY(m_app->queries().workLogsForTask(id).isEmpty());
+        QCOMPARE(m_app->timeChecks().size(), 1);
+        QVERIFY(m_app->resolveTimeCheck(check.value("id").toString(), 0));
+        QVERIFY(m_app->timeChecks().isEmpty());
+        QVERIFY(m_app->queries().workLogsForTask(id).isEmpty());
+
+        // How sure is sure: half again the plan, or 15 minutes over.
+        QVERIFY(guessWork(0, 5, 20 * min)->sure);
+        QVERIFY(!guessWork(0, 5, 21 * min)->sure);
+        QVERIFY(guessWork(0, 60, 90 * min)->sure);
+        QVERIFY(!guessWork(0, 60, 91 * min)->sure);
+        QVERIFY(!guessWork(0, 30, 30 * 1000)); // only just due
+        // More than the time in between ends when it was ticked off.
+        const TimeCheck c{"c", "t", "x", {}, 0, 30 * min, 5};
+        QCOMPARE(workSpan(c, 10), std::make_pair(qint64(0), 10 * min));
+        QCOMPARE(workSpan(c, 45), std::make_pair(-15 * min, 30 * min));
+    }
+
     void dependenciesBlockReady()
     {
         const QString review = m_app->createTask({{"title", "Review"}});

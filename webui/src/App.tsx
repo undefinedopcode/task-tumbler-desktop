@@ -2,6 +2,7 @@ import * as Tooltip from '@radix-ui/react-tooltip'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { call, useProp, useSignal } from './bridge/hooks'
 import { ApprovalDialog } from './components/ApprovalDialog'
+import { TimeCheckDialog } from './components/TimeChecks'
 import { isoDate } from './components/DatePicker'
 import { EventDialog } from './components/EventDialog'
 import { FocusView } from './components/FocusView'
@@ -193,6 +194,7 @@ function MainApp() {
         {focusMode && <FocusView />}
         <Toasts />
         <ApprovalDialog />
+        <TimeCheckDialog />
         {plan && <PlanDialog day={plan} onClose={() => setPlan(null)} />}
         {event && <EventDialog id={event.id} start={event.start} onClose={() => setEvent(null)} />}
       </Tooltip.Provider>

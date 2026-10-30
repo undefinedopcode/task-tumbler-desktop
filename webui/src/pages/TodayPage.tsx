@@ -5,6 +5,7 @@ import type { Away, EnergyState, Today, Working } from '../bridge/types'
 import { AgendaRow } from '../components/AgendaRow'
 import { Banner } from '../components/Banner'
 import { CalendarChanges } from '../components/CalendarChanges'
+import { TimeChecks } from '../components/TimeChecks'
 import { CaptureBar } from '../components/CaptureBar'
 import { EnergyCheckIn } from '../components/EnergyCheckIn'
 import { ReadyRow } from '../components/ReadyRow'
@@ -58,6 +59,7 @@ export const TodayPage = forwardRef<HTMLInputElement, { onPage: (p: Page) => voi
       <CaptureBar ref={captureRef} />
 
       <CalendarChanges changes={today.calendarChanges ?? []} />
+      <TimeChecks checks={today.timeChecks ?? []} />
 
       {away.minutes !== undefined && (
         <Banner

@@ -43,6 +43,7 @@ Phase 3:
   - A command asks once before it first runs, and again if it changes in any way.
 - **Focus mode:** one task fills the window, with a big timer, its steps, its launchers, and full screen if you want it. The sidebar hides, and the desktop's Do Not Disturb is on while you're in it. The five-minute wrap-up warning still gets through.
 - **Time away:** after 10 idle minutes mid-session (configurable), coming back asks whether to keep that time, leave the break out, or stop as of when you left. It never stops the timer on its own.
+- **Done without Start:** tick off something after its planned start without the timer running, and the time since it was due is logged, if that's about what was planned. If it's much longer (a 5-minute task ticked an hour later), it asks how long it really took: as planned, the whole time, a number of minutes, or don't log it. Unanswered questions wait on Today.
 - **D-Bus API:** `org.kde.tasktumbler` at `/Tasks`. It has Today, Tasks, Task, Current, Capture, Complete, StartWork, StopWork, ScheduleNextSlot and Show, with JSON results.
 - **CLI:** `task-tumbler --add "call mum tomorrow at 6pm"` captures into the running instance.
 - **KRunner** (enable it in Settings): `tt <anything>` captures. Typing part of a task's name lets you open, start or finish it.

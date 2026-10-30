@@ -63,6 +63,7 @@ export interface Today {
   closeOutDue: boolean
   reviewDue: boolean
   calendarChanges?: CalendarChange[]
+  timeChecks?: TimeCheck[]
 }
 
 // A meeting added, moved, cancelled or given a new place by a calendar sync
@@ -349,4 +350,16 @@ export interface RemoteState {
   serveCommand?: string
   notify?: string
   tailscaleName?: string
+}
+
+// Something ticked off long after it was due with no timer running, waiting
+// for how long it took (AppController::timeChecks()).
+export interface TimeCheck {
+  id: string
+  taskId: string
+  title: string
+  start: number
+  doneAt: number
+  planned: number
+  elapsed: number
 }

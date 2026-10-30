@@ -30,7 +30,7 @@ if(BUILD_APP)
     set(APP_DIR ${PROJECT_SOURCE_DIR}/src/app)
     qt_add_executable(tst_appcontroller tst_appcontroller.cpp
         ${APP_DIR}/appcontroller.h ${APP_DIR}/appcontroller.cpp ${APP_DIR}/appcontroller_ai.cpp
-        ${APP_DIR}/appcontroller_desktop.cpp ${APP_DIR}/appcontroller_external.cpp ${APP_DIR}/appcontroller_notes.cpp ${APP_DIR}/appcontroller_stats.cpp ${APP_DIR}/appcontroller_review.cpp ${APP_DIR}/appcontroller_calendar.cpp
+        ${APP_DIR}/appcontroller_desktop.cpp ${APP_DIR}/appcontroller_external.cpp ${APP_DIR}/appcontroller_notes.cpp ${APP_DIR}/appcontroller_stats.cpp ${APP_DIR}/appcontroller_review.cpp ${APP_DIR}/appcontroller_calendar.cpp ${APP_DIR}/appcontroller_worktime.cpp
         ${APP_DIR}/desktop/externalapi.h ${APP_DIR}/desktop/externalapi.cpp
         ${APP_DIR}/desktop/apps.h ${APP_DIR}/desktop/devicecalendars.h ${APP_DIR}/desktop/devicecalendars.cpp
         ${TUMBLER_CONTROLLER_PLATFORM_SOURCES}

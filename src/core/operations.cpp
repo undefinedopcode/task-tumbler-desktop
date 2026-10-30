@@ -702,6 +702,28 @@ std::optional<Mutation> stopWorkAt(const Queries &q, qint64 endedAt, qint64 now,
     return m;
 }
 
+Mutation logWork(const QString &taskId, const QString &workLogId, qint64 start, qint64 end, const QString &blockId, qint64 now)
+{
+    Mutation m;
+    m.text = QStringLiteral("Log work");
+    m.scopes = {{QStringLiteral("work_logs"), QStringLiteral("id = ?"), {workLogId}}};
+    if (!blockId.isEmpty())
+        m.scopes.append({QStringLiteral("schedules"), QStringLiteral("id = ?"), {blockId}});
+    m.apply = [=](QSqlDatabase db, QString *error) {
+        if (!exec(db,
+                  QStringLiteral("INSERT INTO work_logs (id, task_id, started_at, ended_at, duration_minutes, created_at) "
+                                 "VALUES (?, ?, ?, ?, ?, ?)"),
+                  {workLogId, taskId, start, end, int((end - start + kMinute / 2) / kMinute), now}, error))
+            return false;
+        return blockId.isEmpty()
+            || exec(db,
+                    QStringLiteral("UPDATE schedules SET scheduled_start = ?, scheduled_end = ?, actual_start = ?, actual_end = ?, "
+                                   "work_log_id = ? WHERE id = ?"),
+                    {start, end, start, end, workLogId, blockId}, error);
+    };
+    return m;
+}
+
 std::optional<Mutation> addAction(const Queries &q, const TaskAction &a, qint64 now, QString *error)
 {
     if (!q.task(a.taskId)) {
