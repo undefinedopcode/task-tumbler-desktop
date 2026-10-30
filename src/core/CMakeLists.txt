@@ -19,6 +19,7 @@ qt_add_library(tumbler-core STATIC
     reminderplan.h reminderplan.cpp
     dayplanner.h dayplanner.cpp
     sync.h sync.cpp
+    calendarchanges.h calendarchanges.cpp
     notes.h notes.cpp
     stats.h stats.cpp
     review.h review.cpp

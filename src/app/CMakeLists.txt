@@ -1,6 +1,6 @@
 qt_add_executable(task-tumbler
     main.cpp
-    appcontroller.h appcontroller.cpp appcontroller_ai.cpp appcontroller_desktop.cpp appcontroller_external.cpp appcontroller_notes.cpp appcontroller_stats.cpp appcontroller_review.cpp
+    appcontroller.h appcontroller.cpp appcontroller_ai.cpp appcontroller_desktop.cpp appcontroller_external.cpp appcontroller_notes.cpp appcontroller_stats.cpp appcontroller_review.cpp appcontroller_calendar.cpp
     keystore.h keystore.cpp
     tasklistmodel.h tasklistmodel.cpp
     variants.h variants.cpp
@@ -12,6 +12,7 @@ qt_add_executable(task-tumbler
     desktop/externalapi.h desktop/externalapi.cpp
     desktop/apps.h desktop/presence.h desktop/hotkey.h
     desktop/devicecalendars.h desktop/devicecalendars.cpp
+    desktop/attention.h
     remote/remotehub.h remote/remotehub.cpp
     sync/synchub.h sync/synchub.cpp
     web/appscheme.h web/appscheme.cpp

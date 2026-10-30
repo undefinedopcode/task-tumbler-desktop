@@ -1,5 +1,6 @@
 #pragma once
 
+#include "calendarchanges.h"
 #include "entities.h"
 #include "mutation.h"
 #include "queries.h"
@@ -87,6 +88,9 @@ struct FeedResult {
     int created = 0;
     int updated = 0;
     int removed = 0;
+    // Timed events not yet over that were added, moved, cancelled or given
+    // a new place. Empty on a feed's first pull, which is all "new".
+    QList<CalendarChange> changes;
 };
 
 // Replaces what a feed contributed between `from` and `to` (UTC ms) with

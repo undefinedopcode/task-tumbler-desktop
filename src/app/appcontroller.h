@@ -1,5 +1,6 @@
 #pragma once
 
+#include "calendarchanges.h"
 #include "captureparser.h"
 #include "database.h"
 #include "dayplanner.h"
@@ -267,6 +268,20 @@ public:
     // The name of the subscribed calendar an event comes from, if any.
     QString feedNameOf(const QString &eventId) const;
 
+    // --- calendar changes (appcontroller_calendar.cpp) -----------------------
+    // What a calendar sync changed: kept for Today's "Calendar changes" box
+    // (today and tomorrow only), and announced by calendarAlert when it's
+    // within two hours.
+    void noteCalendarChanges(const QList<CalendarChange> &fresh);
+    // Today's kept changes, oldest first, as the UI shows them.
+    QVariantList calendarChanges() const;
+    Q_INVOKABLE void dismissCalendarChange(const QString &key);
+    Q_INVOKABLE void dismissCalendarChanges();
+    // Moves a block that clashes with a changed event to just after it.
+    Q_INVOKABLE bool moveAfterEvent(const QString &blockId, const QString &key);
+    // When the working day starts: the earliest category window that day.
+    std::optional<qint64> workStart(QDate day) const;
+
 Q_SIGNALS:
     void changed(const QStringList &tables);
     void todayChanged();
@@ -296,6 +311,12 @@ Q_SIGNALS:
     // Show a page by its name (from a notification, say).
     void pageRequested(const QString &name);
     void weekSummaryReady(const QVariantMap &summary);
+    // A calendar change worth interrupting for: the change as calendarChanges()
+    // shows it, with "urgency" "today" or "soon".
+    void calendarAlert(const QVariantMap &change);
+    // Bounce the Dock icon / flash the taskbar; urgent keeps it up until the
+    // app is looked at.
+    void attentionRequested(bool urgent);
 
 private:
     void refresh(const QSet<QString> &tables);

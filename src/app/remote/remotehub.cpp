@@ -341,6 +341,8 @@ QJsonObject RemoteHub::command(const QJsonObject &c, QString *error)
         ok = m_app->bump(id, std::clamp(c.value(QLatin1String("minutes")).toInt(15), 5, 24 * 60));
     } else if (type == QLatin1String("bumpNext")) {
         ok = m_app->bumpToNextSlot(id);
+    } else if (type == QLatin1String("moveAfterEvent")) {
+        ok = m_app->moveAfterEvent(id, c.value(QLatin1String("key")).toString());
     } else if (type == QLatin1String("startWork")) {
         ok = m_app->startWork(taskId);
     } else if (type == QLatin1String("stopWork")) {

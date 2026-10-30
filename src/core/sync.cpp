@@ -270,6 +270,11 @@ std::optional<Mutation> pullFeed(const Queries &q, const QString &integrationId,
         QString eventId;
         QString hash;
         bool inWindow = false;
+        bool allDay = false;
+        qint64 start = 0;
+        qint64 end = 0;
+        QString title;
+        QString location;
     };
     // External ids are only unique per integration, and two feeds can share
     // an event (the same calendar twice, an invite in both): prefix the feed.
@@ -277,7 +282,8 @@ std::optional<Mutation> pullFeed(const Queries &q, const QString &integrationId,
     const QDate firstDay = QDateTime::fromMSecsSinceEpoch(from, QTimeZone(timezone.toUtf8())).date();
     QHash<QString, Existing> existing;
     QSqlQuery s(q.db());
-    s.prepare(QStringLiteral("SELECT se.id, se.external_event_id, se.event_id, se.data_hash, e.is_all_day, e.start_at, e.end_date "
+    s.prepare(QStringLiteral("SELECT se.id, se.external_event_id, se.event_id, se.data_hash, e.is_all_day, e.start_at, e.end_date, e.end_at, "
+                             "e.title, e.location "
                              "FROM synced_events se JOIN events e ON e.id = se.event_id "
                              "WHERE se.integration_id = ? AND se.external_calendar_id = ?"));
     s.addBindValue(integrationId);
@@ -287,8 +293,25 @@ std::optional<Mutation> pullFeed(const Queries &q, const QString &integrationId,
         const bool allDay = s.value(4).toBool();
         const bool inWindow = allDay ? QDate::fromString(s.value(6).toString(), Qt::ISODate) >= firstDay
                                      : (s.value(5).toLongLong() >= from && s.value(5).toLongLong() < to);
-        existing.insert(s.value(1).toString(), {s.value(0).toString(), s.value(2).toString(), s.value(3).toString(), inWindow});
+        existing.insert(s.value(1).toString(), {s.value(0).toString(), s.value(2).toString(), s.value(3).toString(), inWindow, allDay,
+                                                s.value(5).toLongLong(), s.value(7).toLongLong(), s.value(8).toString(),
+                                                s.value(9).toString()});
     }
+    // A feed's first pull brings everything in at once: none of it is news.
+    const bool firstPull = existing.isEmpty();
+    const auto change = [&](CalendarChange::Kind kind, const QString &key, const QString &eventId, const QString &title,
+                            const QString &location, qint64 start, qint64 end) {
+        CalendarChange c;
+        c.key = key;
+        c.kind = kind;
+        c.eventId = eventId;
+        c.title = title;
+        c.location = location;
+        c.start = start;
+        c.end = end;
+        c.seenAt = now;
+        return c;
+    };
 
     FeedResult r;
     QList<Mutation> parts;
@@ -319,10 +342,26 @@ std::optional<Mutation> pullFeed(const Queries &q, const QString &integrationId,
                                             "event_id, data_hash, last_synced_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"),
                              {newId(), integrationId, feedId, externalId, e.id, hash, now, now}));
             ++r.created;
+            if (!firstPull && !e.allDay && e.endAt > now)
+                r.changes.append(change(CalendarChange::Kind::Added, externalId, e.id, e.title, e.location, e.startAt, e.endAt));
         } else {
             parts.append(raw({linkScope}, QStringLiteral("UPDATE synced_events SET data_hash = ?, last_synced_at = ? WHERE id = ?"),
                              {hash, now, it->linkId}));
             ++r.updated;
+            // What matters to someone's day: the time, and where to go.
+            if (!e.allDay && !it->allDay && std::max(e.endAt, it->end) > now) {
+                CalendarChange c = change(CalendarChange::Kind::Moved, externalId, e.id, e.title, e.location, e.startAt, e.endAt);
+                if (e.location != it->location)
+                    c.oldLocation = it->location;
+                if (e.startAt != it->start || e.endAt != it->end) {
+                    c.oldStart = it->start;
+                    c.oldEnd = it->end;
+                    r.changes.append(c);
+                } else if (e.location != it->location) {
+                    c.kind = CalendarChange::Kind::Changed;
+                    r.changes.append(c);
+                }
+            }
         }
     }
     for (auto it = existing.cbegin(); it != existing.cend(); ++it) {
@@ -331,6 +370,8 @@ std::optional<Mutation> pullFeed(const Queries &q, const QString &integrationId,
         parts.append(raw({{QStringLiteral("events"), QStringLiteral("id = ?"), {it->eventId}}, linkScope},
                          QStringLiteral("DELETE FROM events WHERE id = ?"), {it->eventId}));
         ++r.removed;
+        if (!it->allDay && it->end > now)
+            r.changes.append(change(CalendarChange::Kind::Cancelled, it.key(), {}, it->title, it->location, it->start, it->end));
     }
     if (result)
         *result = r;

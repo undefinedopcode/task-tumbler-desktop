@@ -196,6 +196,69 @@ private slots:
         QVERIFY(messages.last().first().toString().contains("after its due date"));
     }
 
+    void calendarChangesShowAndAlert()
+    {
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        const qint64 min = 60000;
+        const auto change = [now](const QString &key, CalendarChange::Kind kind, qint64 start) {
+            CalendarChange c;
+            c.key = key;
+            c.kind = kind;
+            c.title = key;
+            c.start = start;
+            c.end = start + 30 * 60000;
+            c.seenAt = now;
+            return c;
+        };
+        // Planned work the new meeting runs into.
+        const QString task = m_app->createTask({{"title", "Draft report"}});
+        QVERIFY(m_app->scheduleAt(task, now + 50 * min, 30));
+        const QString block = m_app->queries().schedulesForTask(task).first().id;
+
+        QSignalSpy alerts(m_app.get(), &AppController::calendarAlert);
+        m_app->noteCalendarChanges({change("work/soon", CalendarChange::Kind::Added, now + 20 * min),
+                                    change("work/hour", CalendarChange::Kind::Added, now + 60 * min),
+                                    change("work/later", CalendarChange::Kind::Added, now + 5 * 60 * min),
+                                    change("work/nextweek", CalendarChange::Kind::Added, now + 7 * 24 * 60 * min)});
+        // Next week isn't news; five hours away is shown but not announced.
+        QStringList shown;
+        for (const QVariant &v : m_app->today().value("calendarChanges").toList())
+            shown.append(v.toMap().value("key").toString());
+        QCOMPARE(shown, QStringList({"work/soon", "work/hour", "work/later"}));
+        QCOMPARE(alerts.count(), 2);
+        QCOMPARE(alerts[0].first().toMap().value("urgency").toString(), QStringLiteral("soon"));
+        const QVariantMap hour = alerts[1].first().toMap();
+        QCOMPARE(hour.value("urgency").toString(), QStringLiteral("today"));
+        QCOMPARE(hour.value("clashes").toList().size(), 1);
+        QCOMPARE(hour.value("clashes").toList().first().toMap().value("title").toString(), QStringLiteral("Draft report"));
+
+        // The clash moves to right after the meeting.
+        QVERIFY(m_app->moveAfterEvent(block, "work/hour"));
+        QCOMPARE(m_app->queries().schedule(block)->start, now + 90 * min);
+
+        // Dismissing isn't an undo step.
+        const QString lastStep = m_app->undoText();
+        m_app->dismissCalendarChange("work/soon");
+        QCOMPARE(m_app->today().value("calendarChanges").toList().size(), 2);
+        m_app->dismissCalendarChanges();
+        QVERIFY(m_app->today().value("calendarChanges").toList().isEmpty());
+        QCOMPARE(m_app->undoText(), lastStep);
+    }
+
+    void workStartIsTheEarliestWorkingWindow()
+    {
+        const QDate day = QDate::currentDate();
+        // Only the default category: its window counts.
+        const auto dflt = m_app->workStart(day);
+        QVERIFY(dflt.has_value());
+        // A category shown on the schedule takes over.
+        QVariantList days;
+        for (int i = 0; i < 7; ++i)
+            days.append(QVariantMap{{"day", i}, {"enabled", true}, {"start", "08:30"}, {"end", "17:00"}});
+        QVERIFY(!m_app->saveCategory({{"name", "Work"}, {"showOnSchedule", true}, {"days", days}}).isEmpty());
+        QCOMPARE(*m_app->workStart(day), QDateTime(day, QTime(8, 30)).toMSecsSinceEpoch());
+    }
+
     void schedulingAtAChosenTime()
     {
         const QString id = m_app->createTask({{"title", "Gym"}, {"time_estimate_minutes", 45}});

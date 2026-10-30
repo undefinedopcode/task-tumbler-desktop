@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDate>
+#include <QVariantMap>
 #include <QObject>
 #include <QSet>
 #include <QTimer>
@@ -29,6 +30,14 @@ private:
     void nudgeCloseOut(bool desktop, bool phone);
     void notify(const QString &event, const QString &title, const QString &text, const AgendaItem &item, bool missed = false);
     void pushToPhone(const QString &event, const QString &title, const QString &text, const AgendaItem &item, bool missed);
+    // A calendar change near enough to interrupt for (AppController::calendarAlert).
+    void calendarAlert(const QVariantMap &change);
+    // At the start of the working day: changes that came in overnight and
+    // affect its first hour, which no alert has covered yet.
+    void startOfDayBrief(QDate day, qint64 now);
+    void notifyCalendar(const QString &title, const QString &text, bool urgent, const QVariantMap &change);
+    // Where notifications go now: "desktop", "phone" or "both".
+    QString route() const;
     bool userAway() const;
 
     AppController *m_app;
@@ -37,6 +46,7 @@ private:
     QSet<QString> m_fired;
     qint64 m_startedAt;
     QDate m_closeOutNudged;
+    QDate m_briefed;
 };
 
 } // namespace tumbler

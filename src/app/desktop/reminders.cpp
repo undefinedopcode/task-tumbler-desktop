@@ -28,7 +28,15 @@ Reminders::Reminders(AppController *app, RemoteHub *hub, QObject *parent)
     m_timer.setInterval(20 * 1000);
     connect(&m_timer, &QTimer::timeout, this, &Reminders::check);
     connect(app, &AppController::todayChanged, this, &Reminders::check);
+    connect(app, &AppController::calendarAlert, this, &Reminders::calendarAlert);
     m_timer.start();
+}
+
+QString Reminders::route() const
+{
+    const QVariantMap settings = m_app->settings();
+    return RemoteHub::route(settings.value(QStringLiteral("remoteNotify"), QStringLiteral("away")).toString(), m_hub && m_hub->hasPhones(),
+                            userAway());
 }
 
 void Reminders::check()
@@ -44,14 +52,15 @@ void Reminders::check()
         return QLocale().toString(QDateTime::fromMSecsSinceEpoch(ms, m_app->zone()).time(), QLocale::ShortFormat);
     };
 
+    startOfDayBrief(view.date, now);
+
     const QList<Reminder> due = dueReminders(view, now, lead, m_startedAt, m_fired);
     const bool closeOut = m_app->today().value(QStringLiteral("closeOutDue")).toBool() && m_closeOutNudged != view.date;
     if (due.isEmpty() && !closeOut)
         return;
-    const QString route = RemoteHub::route(settings.value(QStringLiteral("remoteNotify"), QStringLiteral("away")).toString(),
-                                           m_hub && m_hub->hasPhones(), userAway());
-    const bool desktop = route != QLatin1String("phone");
-    const bool phone = route != QLatin1String("desktop");
+    const QString where = route();
+    const bool desktop = where != QLatin1String("phone");
+    const bool phone = where != QLatin1String("desktop");
     if (closeOut) {
         m_closeOutNudged = view.date;
         nudgeCloseOut(desktop, phone);
@@ -232,6 +241,150 @@ void Reminders::notify(const QString &event, const QString &title, const QString
         break;
     }
     n->sendEvent();
+}
+
+// ---- calendar changes ------------------------------------------------------------
+
+namespace {
+
+// Title and one line for a change, as calendarChanges() describes it.
+QPair<QString, QString> describe(const QVariantMap &c)
+{
+    const QString kind = c.value(QStringLiteral("kind")).toString();
+    const QString title = c.value(QStringLiteral("title")).toString();
+    const QString when = c.value(QStringLiteral("when")).toString();
+    const QString where = c.value(QStringLiteral("location")).toString();
+    QString head, text;
+    if (kind == QLatin1String("added")) {
+        head = i18n("New: %1", title);
+        text = where.isEmpty() ? i18n("At %1", when) : i18n("At %1, %2", when, where);
+    } else if (kind == QLatin1String("moved")) {
+        head = i18n("Moved: %1", title);
+        text = i18n("Now %1 (was %2)", when, c.value(QStringLiteral("oldWhen")).toString());
+    } else if (kind == QLatin1String("cancelled")) {
+        head = i18n("Cancelled: %1", title);
+        text = i18n("It was at %1; that time is free now", when);
+    } else {
+        head = i18n("New place: %1", title);
+        text = i18n("At %1, now in %2", when, where.isEmpty() ? i18n("no set place") : where);
+    }
+    const QVariantList clashes = c.value(QStringLiteral("clashes")).toList();
+    if (clashes.size() == 1)
+        text += QLatin1String(". ") + i18n("Clashes with “%1”", clashes.first().toMap().value(QStringLiteral("title")).toString());
+    else if (clashes.size() > 1)
+        text += QLatin1String(". ") + i18n("Clashes with %1 planned blocks", clashes.size());
+    return {head, text};
+}
+
+} // namespace
+
+void Reminders::calendarAlert(const QVariantMap &change)
+{
+    if (!m_app->settings().value(QStringLiteral("notifications"), true).toBool())
+        return;
+    const auto [title, text] = describe(change);
+    // Very soon, and something to go to: keep at it until seen. A cancelled
+    // meeting frees time; worth knowing, not worth nagging about.
+    const bool urgent = change.value(QStringLiteral("urgency")).toString() == QLatin1String("soon")
+        && change.value(QStringLiteral("kind")).toString() != QLatin1String("cancelled");
+    notifyCalendar(title, text, urgent, change);
+}
+
+void Reminders::startOfDayBrief(QDate day, qint64 now)
+{
+    if (m_briefed == day)
+        return;
+    const auto start = m_app->workStart(day);
+    if (!start || now < *start)
+        return;
+    m_briefed = day;
+    if (now >= *start + 60 * kMinute)
+        return; // opened later in the day: Today's box has it
+
+    QStringList lines;
+    QVariantMap first;
+    for (const QVariant &v : m_app->calendarChanges()) {
+        const QVariantMap c = v.toMap();
+        const qint64 seenAt = c.value(QStringLiteral("seenAt")).toLongLong();
+        qint64 affects = c.value(QStringLiteral("start")).toLongLong();
+        if (c.contains(QStringLiteral("oldStart")))
+            affects = std::min(affects, c.value(QStringLiteral("oldStart")).toLongLong());
+        // Came in before the day started, bites in its first hour, and was
+        // too far off back then to have been announced.
+        if (seenAt >= *start || affects >= *start + 60 * kMinute || affects - seenAt <= 120 * kMinute)
+            continue;
+        const auto [head, text] = describe(c);
+        lines.append(QStringLiteral("%1. %2").arg(head, text));
+        if (first.isEmpty())
+            first = c;
+    }
+    if (lines.isEmpty())
+        return;
+    if (lines.size() == 1) {
+        const auto [head, text] = describe(first);
+        notifyCalendar(head, text, false, first);
+    } else {
+        notifyCalendar(i18n("Calendar changes since yesterday"), lines.join(QLatin1Char('\n')), false, {});
+    }
+}
+
+void Reminders::notifyCalendar(const QString &title, const QString &text, bool urgent, const QVariantMap &change)
+{
+    const QString where = route();
+    const QString key = change.value(QStringLiteral("key")).toString();
+    const QVariantList clashes = change.value(QStringLiteral("clashes")).toList();
+    const QString blockId = clashes.size() == 1 ? clashes.first().toMap().value(QStringLiteral("blockId")).toString() : QString();
+
+    if (where != QLatin1String("desktop") && m_hub) {
+        QJsonArray actions;
+        QJsonObject commands;
+        if (!blockId.isEmpty()) {
+            actions.append(QJsonObject{{QStringLiteral("action"), QStringLiteral("after")}, {QStringLiteral("title"), i18n("Move my block after it")}});
+            commands.insert(QStringLiteral("after"), QJsonObject{{QStringLiteral("type"), QStringLiteral("moveAfterEvent")},
+                                                                 {QStringLiteral("id"), blockId},
+                                                                 {QStringLiteral("key"), key}});
+        }
+        m_hub->push({{QStringLiteral("title"), title},
+                     {QStringLiteral("body"), text},
+                     {QStringLiteral("tag"), QStringLiteral("tt-cal-") + (key.isEmpty() ? QStringLiteral("brief") : key)},
+                     {QStringLiteral("actions"), actions},
+                     {QStringLiteral("commands"), commands},
+                     {QStringLiteral("event"), QStringLiteral("calendarChange")}},
+                    QStringLiteral("high"));
+    }
+    if (where == QLatin1String("phone"))
+        return;
+
+    auto *n = new KNotification(QStringLiteral("calendarChange"), urgent ? KNotification::Persistent : KNotification::CloseOnTimeout);
+    n->setComponentName(QStringLiteral("tasktumbler"));
+    n->setTitle(title);
+    n->setText(text);
+    n->setIconName(QStringLiteral("org.kde.tasktumbler"));
+    // Gets through Do Not Disturb and focus mode: missing the meeting is
+    // worse than the interruption.
+    n->setUrgency(urgent ? KNotification::CriticalUrgency : KNotification::HighUrgency);
+    QPointer<AppController> app = m_app;
+    const auto open = [app] {
+        if (!app)
+            return;
+        Q_EMIT app->showWindowRequested();
+        Q_EMIT app->pageRequested(QStringLiteral("today"));
+    };
+    connect(n->addDefaultAction(i18n("Open")), &KNotificationAction::activated, this, open);
+    if (!blockId.isEmpty()) {
+        connect(n->addAction(i18n("Move my block after it")), &KNotificationAction::activated, this, [app, blockId, key] {
+            if (app)
+                app->moveAfterEvent(blockId, key);
+        });
+    }
+    if (!key.isEmpty()) {
+        connect(n->addAction(i18n("Got it")), &KNotificationAction::activated, this, [app, key] {
+            if (app)
+                app->dismissCalendarChange(key);
+        });
+    }
+    n->sendEvent();
+    Q_EMIT m_app->attentionRequested(urgent);
 }
 
 } // namespace tumbler

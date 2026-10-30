@@ -91,6 +91,7 @@ private:
     sync::LinearClient m_linear;
     sync::FeedFetcher m_fetcher;
     QTimer m_every;
+    QTimer m_feedsEvery; // calendars more often: short-notice changes matter
     QTimer m_push;
     QTimer m_deviceChanged; // calendar edits come in bursts
     bool m_watchingDevice = false;

@@ -2,6 +2,7 @@
 
 #include "appcontroller.h"
 #include "appscheme.h"
+#include "desktop/attention.h"
 #include "shellbridge.h"
 
 #include <QCloseEvent>
@@ -139,6 +140,7 @@ WebShell::WebShell(AppController *app, QObject *sync, QObject *remote, const Opt
     connect(m_view, &QWebEngineView::loadFinished, this, &WebShell::loaded);
 
     connect(app, &AppController::showWindowRequested, this, &WebShell::raiseWindow);
+    connect(app, &AppController::attentionRequested, this, [this](bool urgent) { attention::request(this, urgent); });
     connect(app, &AppController::focusModeChanged, this, [this] {
         if (m_app->focusMode())
             raiseWindow();

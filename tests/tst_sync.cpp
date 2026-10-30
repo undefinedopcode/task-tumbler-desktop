@@ -268,6 +268,102 @@ private slots:
         QCOMPARE(r.created + r.updated + r.removed, 0);
         run(pullFeed(q(), ics, "uk", {}, kNow, kNow + 400 * 24 * kHour, "Europe/London", kNow, &r));
         QCOMPARE(r.removed, 1);
+        QVERIFY(r.changes.isEmpty()); // all-day events don't raise alerts
+    }
+
+    void feedReportsChangesThatMatter()
+    {
+        using Kind = CalendarChange::Kind;
+        const QString ics = *ensureIntegration(db(), "ics", kNow);
+        const qint64 from = kNow - 24 * kHour, to = kNow + 30 * 24 * kHour;
+        FeedResult r;
+        // First pull: everything is new, none of it news.
+        run(pullFeed(q(), ics, "work", {meeting("standup", kNow + kHour), meeting("old", kNow - 3 * kHour, "Earlier"),
+                                         meeting("planning", kNow + 4 * kHour, "Planning")},
+                     from, to, "Europe/London", kNow, &r));
+        QCOMPARE(r.created, 3);
+        QVERIFY(r.changes.isEmpty());
+
+        // Invited to something; planning moved; standup's room changed; a
+        // past meeting edited (not news).
+        RemoteEvent standup = meeting("standup", kNow + kHour);
+        standup.event.location = "Room 2";
+        RemoteEvent old = meeting("old", kNow - 3 * kHour, "Earlier (notes added)");
+        run(pullFeed(q(), ics, "work", {standup, old, meeting("planning", kNow + 5 * kHour, "Planning"), meeting("sync", kNow + kHour / 2, "Design sync")},
+                     from, to, "Europe/London", kNow, &r));
+        QCOMPARE(r.changes.size(), 3);
+        QHash<QString, CalendarChange> byKey;
+        for (const CalendarChange &c : r.changes)
+            byKey.insert(c.key, c);
+        QCOMPARE(byKey["work/sync"].kind, Kind::Added);
+        QCOMPARE(byKey["work/sync"].title, QStringLiteral("Design sync"));
+        QVERIFY(!byKey["work/sync"].eventId.isEmpty());
+        QCOMPARE(byKey["work/planning"].kind, Kind::Moved);
+        QCOMPARE(byKey["work/planning"].oldStart, kNow + 4 * kHour);
+        QCOMPARE(byKey["work/planning"].start, kNow + 5 * kHour);
+        QCOMPARE(byKey["work/standup"].kind, Kind::Changed);
+        QCOMPARE(byKey["work/standup"].location, QStringLiteral("Room 2"));
+
+        // Cancelled.
+        run(pullFeed(q(), ics, "work", {standup, old, meeting("planning", kNow + 5 * kHour, "Planning")}, from, to, "Europe/London", kNow, &r));
+        QCOMPARE(r.changes.size(), 1);
+        QCOMPARE(r.changes[0].kind, Kind::Cancelled);
+        QCOMPARE(r.changes[0].title, QStringLiteral("Design sync"));
+        QVERIFY(r.changes[0].eventId.isEmpty());
+    }
+
+    void changesMergePerEvent()
+    {
+        using Kind = CalendarChange::Kind;
+        const auto c = [](Kind kind, qint64 start, qint64 oldStart = 0) {
+            CalendarChange x;
+            x.key = "work/a";
+            x.kind = kind;
+            x.title = "Review";
+            x.start = start;
+            x.end = start + kHour;
+            if (oldStart) {
+                x.oldStart = oldStart;
+                x.oldEnd = oldStart + kHour;
+            }
+            return x;
+        };
+        // New, then moved: still new, at the new time.
+        auto kept = mergeChanges({}, {c(Kind::Added, kNow + kHour)}, kNow);
+        kept = mergeChanges(kept, {c(Kind::Moved, kNow + 2 * kHour, kNow + kHour)}, kNow);
+        QCOMPARE(kept.size(), 1);
+        QCOMPARE(kept[0].kind, Kind::Added);
+        QCOMPARE(kept[0].start, kNow + 2 * kHour);
+
+        // Moved twice: from the first time to the last...
+        kept = mergeChanges({}, {c(Kind::Moved, kNow + 2 * kHour, kNow + kHour)}, kNow);
+        kept = mergeChanges(kept, {c(Kind::Moved, kNow + 3 * kHour, kNow + 2 * kHour)}, kNow);
+        QCOMPARE(kept[0].oldStart, kNow + kHour);
+        QCOMPARE(kept[0].start, kNow + 3 * kHour);
+        // ...and back again: nothing to say.
+        kept = mergeChanges(kept, {c(Kind::Moved, kNow + kHour, kNow + 3 * kHour)}, kNow);
+        QVERIFY(kept.isEmpty());
+
+        // Cancelled replaces whatever came before.
+        kept = mergeChanges({c(Kind::Added, kNow + kHour)}, {c(Kind::Cancelled, kNow + kHour)}, kNow);
+        QCOMPARE(kept[0].kind, Kind::Cancelled);
+
+        // Over: dropped.
+        QVERIFY(mergeChanges(kept, {}, kNow + 3 * kHour).isEmpty());
+
+        // Saved and read back.
+        kept = mergeChanges({}, {c(Kind::Moved, kNow + 2 * kHour, kNow + kHour)}, kNow);
+        const auto back = changesFromJson(toJson(kept));
+        QCOMPARE(back.size(), 1);
+        QCOMPARE(back[0].kind, Kind::Moved);
+        QCOMPARE(back[0].oldStart, kNow + kHour);
+
+        // Urgency counts from the earlier of the old and new times.
+        QCOMPARE(urgencyOf(c(Kind::Added, kNow + 20 * 60000), kNow), ChangeUrgency::Soon);
+        QCOMPARE(urgencyOf(c(Kind::Added, kNow - 10 * 60000), kNow), ChangeUrgency::Soon); // under way
+        QCOMPARE(urgencyOf(c(Kind::Added, kNow + 90 * 60000), kNow), ChangeUrgency::Today);
+        QCOMPARE(urgencyOf(c(Kind::Moved, kNow + 5 * kHour, kNow + kHour), kNow), ChangeUrgency::Today);
+        QCOMPARE(urgencyOf(c(Kind::Added, kNow + 3 * kHour), kNow), ChangeUrgency::Later);
     }
 };
 

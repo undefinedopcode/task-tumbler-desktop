@@ -286,6 +286,7 @@ void AppController::refreshToday()
         {QStringLiteral("readyTotal"), v.readyTotal},
         {QStringLiteral("closeOutDue"), closeOutDue()},
         {QStringLiteral("reviewDue"), reviewDue()},
+        {QStringLiteral("calendarChanges"), calendarChanges()},
     };
     Q_EMIT todayChanged();
 

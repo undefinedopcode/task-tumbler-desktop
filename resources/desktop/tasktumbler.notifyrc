@@ -28,3 +28,9 @@ Action=Popup
 Name=Close out the day
 Comment=The evening nudge to wrap up the day
 Action=Popup
+
+[Event/calendarChange]
+Name=Calendar change
+Comment=A meeting was added, moved, cancelled or given a new room at short notice
+Action=Popup|Sound
+Sound=Oxygen-Sys-App-Message.ogg

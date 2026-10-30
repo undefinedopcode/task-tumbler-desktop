@@ -16,6 +16,7 @@ SyncHub *s_instance = nullptr;
 const QString kLinearKey = QStringLiteral("linear-api-key");
 constexpr qint64 kDay = 24 * 3600 * 1000LL;
 constexpr int kEveryMs = 15 * 60 * 1000;
+constexpr int kFeedsEveryMs = 5 * 60 * 1000;
 
 QString plural(int n, const QString &one, const QString &many)
 {
@@ -33,6 +34,11 @@ SyncHub::SyncHub(AppController *app, KeyStore *keys, QObject *parent)
 {
     m_every.setInterval(kEveryMs);
     connect(&m_every, &QTimer::timeout, this, &SyncHub::syncNow);
+    m_feedsEvery.setInterval(kFeedsEveryMs);
+    connect(&m_feedsEvery, &QTimer::timeout, this, [this] {
+        if (m_running == 0)
+            syncFeeds([] {});
+    });
 
     // Finishing a linked task: tell the service shortly after.
     m_push.setSingleShot(true);
@@ -57,9 +63,11 @@ void SyncHub::setAutomatic(bool on)
 {
     if (!on) {
         m_every.stop();
+        m_feedsEvery.stop();
         return;
     }
     m_every.start();
+    m_feedsEvery.start();
     watchDeviceCalendars();
     // Shortly after start, once the window is up and the network likely is.
     QTimer::singleShot(20000, this, &SyncHub::syncNow);
@@ -323,8 +331,8 @@ void SyncHub::applyFeed(const sync::FeedSettings &feed, const QList<sync::Remote
         sync::FeedResult r;
         const auto m = sync::pullFeed(m_app->queries(), integration(QStringLiteral("ics")), feed.id, events, from, to,
                                       QString::fromUtf8(m_app->zone().id()), now, &r, &error);
-        if (m)
-            m_app->applyExternal(*m, &error);
+        if (m && m_app->applyExternal(*m, &error) && !r.changes.isEmpty())
+            m_app->noteCalendarChanges(r.changes);
     }
     FeedStatus &st = m_feedStatus[feed.id];
     st.error = error;

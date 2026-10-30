@@ -62,6 +62,27 @@ export interface Today {
   readyTotal: number
   closeOutDue: boolean
   reviewDue: boolean
+  calendarChanges?: CalendarChange[]
+}
+
+// A meeting added, moved, cancelled or given a new place by a calendar sync
+// (AppController::calendarChanges()).
+export interface CalendarChange {
+  key: string
+  kind: 'added' | 'moved' | 'cancelled' | 'changed'
+  title: string
+  eventId: string
+  location: string
+  oldLocation: string
+  start: number
+  end: number
+  when: string
+  oldStart?: number
+  oldWhen?: string
+  seenAt: number
+  urgency: 'soon' | 'today' | 'later'
+  underway: boolean
+  clashes: { blockId: string; taskId: string; title: string; when: string }[]
 }
 
 export interface Working {
