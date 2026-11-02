@@ -98,7 +98,7 @@ private slots:
             QVERIFY(!t.toObject().value("description").toString().isEmpty());
         }
         QCOMPARE(names, QStringList({"get_today", "list_tasks", "get_task", "get_current", "add_task", "complete_task", "start_work",
-                                     "stop_work", "schedule_task", "search_notes", "get_note", "add_note", "append_to_note", "get_stats",
+                                     "stop_work", "schedule_task", "search_notes", "get_note", "add_note", "append_to_note", "edit_note", "get_stats",
                                      "get_close_out", "resolve_leftover", "clear_leftovers", "add_to_day_note", "close_day", "let_go",
                                      "get_week_review", "finish_week_review"}));
         QVERIFY(tools.at(names.indexOf("get_close_out")).toObject().value("annotations").toObject().value("readOnlyHint").toBool());
@@ -133,7 +133,7 @@ private slots:
     void noteToolsMapToTheApi()
     {
         FakeBackend backend;
-        backend.answers = {{"Notes", "[]"}, {"AddNote", "note-1"}, {"AppendToNote", true}, {"Note", "{\"id\":\"note-1\"}"}};
+        backend.answers = {{"Notes", "[]"}, {"AddNote", "note-1"}, {"AppendToNote", true}, {"EditNote", true}, {"Note", "{\"id\":\"note-1\"}"}};
         Server server(&backend);
 
         auto reply = server.handle(request("tools/call", {{"name", "search_notes"}, {"arguments", QJsonObject{{"query", "budget"}}}}));
@@ -149,12 +149,18 @@ private slots:
         QVERIFY(!isToolError(*reply));
         QCOMPARE(backend.calls.last().second, QVariantList({"note-1", "more"}));
 
+        reply = server.handle(request("tools/call", {{"name", "edit_note"},
+                                                     {"arguments", QJsonObject{{"id", "note-1"}, {"old_text", "more"}, {"new_text", ""}}}}));
+        QVERIFY(!isToolError(*reply));
+        QCOMPARE(backend.calls.last(), qMakePair(QStringLiteral("EditNote"), QVariantList({"note-1", "more", ""})));
+
         // Refused before reaching the app.
         const qsizetype before = backend.calls.size();
         reply = server.handle(request("tools/call", {{"name", "get_note"}, {"arguments", QJsonObject{}}}));
         QVERIFY(toolTextOf(*reply).contains("note id"));
         QVERIFY(isToolError(*server.handle(request("tools/call", {{"name", "append_to_note"}, {"arguments", QJsonObject{{"id", "x"}, {"text", " "}}}}))));
         QVERIFY(isToolError(*server.handle(request("tools/call", {{"name", "add_note"}, {"arguments", QJsonObject{{"title", ""}}}}))));
+        QVERIFY(isToolError(*server.handle(request("tools/call", {{"name", "edit_note"}, {"arguments", QJsonObject{{"id", "x"}, {"new_text", "y"}}}}))));
         QCOMPARE(backend.calls.size(), before);
     }
 

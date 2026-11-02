@@ -883,12 +883,29 @@ private slots:
         QCOMPARE(found.first().toObject().value("snippet").toString(), QStringLiteral("tag & push - write changelog"));
         QCOMPARE(QJsonDocument::fromJson(api.Notes("", "release").toUtf8()).array().size(), 1);
 
+        // Edits replace one exact passage, as one undo step.
+        QVERIFY(api.EditNote(id, "tag & push", "tag, push & announce"));
+        QCOMPARE(m_app->undoText(), QStringLiteral("Edit note “Release <checklist>”"));
+        QCOMPARE(QJsonDocument::fromJson(api.Note(id).toUtf8()).object().value("content").toString(),
+                 QStringLiteral("tag, push & announce\n\n- write changelog"));
+        QVERIFY(!api.EditNote(id, "not there", "x"));
+        QVERIFY(api.takeError().contains("isn't in the note"));
+        QVERIFY(!api.EditNote(id, "a", "x"));
+        QVERIFY(api.takeError().contains("appears"));
+        QVERIFY(!api.EditNote(id, "", "x"));
+        QVERIFY(!api.EditNote("no-such-note", "tag", "x"));
+        QVERIFY(api.EditNote(id, "\n\n- write changelog", ""));
+        QCOMPARE(QJsonDocument::fromJson(api.Note(id).toUtf8()).object().value("content").toString(), QStringLiteral("tag, push & announce"));
+        m_app->undo();
+        m_app->undo();
+
         m_app->undo();
         QCOMPARE(QJsonDocument::fromJson(api.Note(id).toUtf8()).object().value("content").toString(), QStringLiteral("tag & push"));
 
         m_app->setSetting("external_writes", false);
         QVERIFY(api.AddNote("blocked", "", "", "").isEmpty());
         QVERIFY(!api.AppendToNote(id, "blocked"));
+        QVERIFY(!api.EditNote(id, "tag", "blocked"));
         m_app->setSetting("external_writes", true);
     }
 

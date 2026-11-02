@@ -113,6 +113,14 @@ QJsonArray Server::tools()
              {{QStringLiteral("id"), prop("string", QStringLiteral("Note id, from search_notes or add_note"))},
               {QStringLiteral("text"), prop("string", QStringLiteral("Markdown to add"))}},
              {QStringLiteral("id"), QStringLiteral("text")}),
+        tool(QStringLiteral("edit_note"),
+             QStringLiteral("Change part of an existing note: replace old_text, copied exactly from get_note and appearing just "
+                            "once, with new_text. Leave new_text empty to remove the passage. Change only what the user asked; "
+                            "to add at the end, use append_to_note."),
+             {{QStringLiteral("id"), prop("string", QStringLiteral("Note id, from search_notes or add_note"))},
+              {QStringLiteral("old_text"), prop("string", QStringLiteral("The exact passage to replace, with enough around it to be unique"))},
+              {QStringLiteral("new_text"), prop("string", QStringLiteral("What it becomes (markdown)"))}},
+             {QStringLiteral("id"), QStringLiteral("old_text"), QStringLiteral("new_text")}),
         tool(QStringLiteral("get_stats"),
              QStringLiteral("Looking back: time worked (per day or week, per task, per hour of day with average energy), tasks and "
                             "routines finished, open tasks that keep getting moved, and how long finished tasks took against their "
@@ -242,6 +250,8 @@ QJsonObject Server::callTool(const QString &name, const QJsonObject &args)
                                                                  args.value(QLatin1String("content")).toString(),
                                                                  args.value(QLatin1String("task_id")).toString(), tags}, false}},
         {QStringLiteral("append_to_note"), {QStringLiteral("AppendToNote"), {id, args.value(QLatin1String("text")).toString()}, true}},
+        {QStringLiteral("edit_note"), {QStringLiteral("EditNote"), {id, args.value(QLatin1String("old_text")).toString(),
+                                                                   args.value(QLatin1String("new_text")).toString()}, true}},
         {QStringLiteral("get_stats"), {QStringLiteral("Stats"), {std::max(0, args.value(QLatin1String("days")).toInt(7))}, false}},
         {QStringLiteral("get_close_out"), {QStringLiteral("CloseOut"), {}, false}},
         {QStringLiteral("resolve_leftover"), {QStringLiteral("ResolveLeftover"), {args.value(QLatin1String("kind")).toString(), id,
@@ -277,6 +287,8 @@ QJsonObject Server::callTool(const QString &name, const QJsonObject &args)
     if ((name == QLatin1String("add_task") || name == QLatin1String("append_to_note") || name == QLatin1String("add_to_day_note"))
         && args.value(QLatin1String("text")).toString().trimmed().isEmpty())
         return toolText(QStringLiteral("%1 needs some text").arg(name), true);
+    if (name == QLatin1String("edit_note") && args.value(QLatin1String("old_text")).toString().isEmpty())
+        return toolText(QStringLiteral("edit_note needs the old_text to replace; to add at the end, use append_to_note"), true);
     if (name == QLatin1String("add_note") && args.value(QLatin1String("title")).toString().trimmed().isEmpty()
         && args.value(QLatin1String("content")).toString().trimmed().isEmpty())
         return toolText(QStringLiteral("add_note needs a title or some content"), true);

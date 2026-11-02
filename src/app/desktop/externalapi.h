@@ -53,6 +53,8 @@ public Q_SLOTS:
     // tags: comma separated; taskId may be empty. Returns the new note's id.
     Q_SCRIPTABLE QString AddNote(const QString &title, const QString &content, const QString &taskId, const QString &tags);
     Q_SCRIPTABLE bool AppendToNote(const QString &id, const QString &text);
+    // Replaces oldText, which must appear exactly once, with newText (may be empty).
+    Q_SCRIPTABLE bool EditNote(const QString &id, const QString &oldText, const QString &newText);
 
     // Looking back over the last `days` days including today (0: everything):
     // time worked, things finished, busy hours, estimate accuracy.

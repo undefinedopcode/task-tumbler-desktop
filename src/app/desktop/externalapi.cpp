@@ -173,6 +173,28 @@ bool ExternalApi::AppendToNote(const QString &id, const QString &text)
     return mayWrite() && m_app->appendToNote(id, text);
 }
 
+bool ExternalApi::EditNote(const QString &id, const QString &oldText, const QString &newText)
+{
+    if (!mayWrite())
+        return false;
+    const QVariantMap n = m_app->noteDetail(id);
+    if (n.isEmpty()) {
+        fail(Failure::BadArgument, QStringLiteral("no note with id %1").arg(id));
+        return false;
+    }
+    const qsizetype found = oldText.isEmpty() ? 0 : n.value(QStringLiteral("content")).toString().count(oldText);
+    if (found != 1) {
+        fail(Failure::BadArgument, found == 0 ? QStringLiteral("old_text isn't in the note; copy it exactly from get_note")
+                                              : QStringLiteral("old_text appears %1 times; include more around it so it's unique").arg(found));
+        return false;
+    }
+    if (oldText == newText) {
+        fail(Failure::BadArgument, QStringLiteral("new_text is the same as old_text"));
+        return false;
+    }
+    return m_app->replaceInNote(id, oldText, newText);
+}
+
 QString ExternalApi::CloseOut()
 {
     return json(m_app->closeOut());

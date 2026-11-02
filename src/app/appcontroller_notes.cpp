@@ -128,6 +128,17 @@ bool AppController::appendToNote(const QString &id, const QString &text)
     return apply(m);
 }
 
+bool AppController::replaceInNote(const QString &id, const QString &oldText, const QString &newText)
+{
+    auto n = notes::get(queries(), id);
+    if (!n || oldText.isEmpty() || n->content.count(oldText) != 1 || oldText == newText)
+        return false;
+    n->content.replace(oldText, newText);
+    Mutation m = notes::save(*n, false, now());
+    m.text = QStringLiteral("Edit note “%1”").arg(n->title);
+    return apply(m);
+}
+
 bool AppController::deleteNote(const QString &id)
 {
     const auto n = notes::get(queries(), id);

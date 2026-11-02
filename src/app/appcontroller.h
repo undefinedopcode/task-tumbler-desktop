@@ -169,6 +169,8 @@ public:
     Q_INVOKABLE bool exportNote(const QString &id, const QUrl &file);
     // Adds a paragraph to the end, as one undoable step (for other apps).
     Q_INVOKABLE bool appendToNote(const QString &id, const QString &text);
+    // Replaces a passage that appears exactly once, as one undoable step.
+    Q_INVOKABLE bool replaceInNote(const QString &id, const QString &oldText, const QString &newText);
     // Open tasks a note can be about: [{id, title}] by title.
     Q_INVOKABLE QVariantList noteTaskChoices() const;
 
