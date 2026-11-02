@@ -127,6 +127,7 @@ QVariantMap SyncHub::state() const
         m.insert(QStringLiteral("error"), st.error);
         m.insert(QStringLiteral("lastSync"), st.lastSync);
         m.insert(QStringLiteral("count"), st.count);
+        m.insert(QStringLiteral("declaredZone"), st.declaredZone);
         m.insert(QStringLiteral("device"), devicecalendars::calendarOf(f.url).has_value());
         feedList.append(m);
     }
@@ -316,8 +317,10 @@ void SyncHub::syncFeed(const sync::FeedSettings &feed, const QByteArray &data, Q
     QList<sync::RemoteEvent> events;
     if (const auto calendar = devicecalendars::calendarOf(feed.url))
         events = devicecalendars::toRemoteEvents(devicecalendars::occurrences(*calendar, from, to, error), feed);
-    else
+    else {
         events = sync::parseIcs(data, feed, from, to, error);
+        m_feedStatus[feed.id].declaredZone = sync::declaredZone(data);
+    }
     applyFeed(feed, events, from.toMSecsSinceEpoch(), to.toMSecsSinceEpoch(), *error);
     *error = m_feedStatus.value(feed.id).error;
 }
@@ -329,7 +332,10 @@ void SyncHub::applyFeed(const sync::FeedSettings &feed, const QList<sync::Remote
     QString error = parseError;
     if (error.isEmpty()) {
         sync::FeedResult r;
-        const auto m = sync::pullFeed(m_app->queries(), integration(QStringLiteral("ics")), feed.id, events, from, to,
+        const QList<sync::RemoteEvent> placed = feed.dayZone.isEmpty()
+            ? events
+            : sync::moveAllDay(events, QTimeZone(feed.dayZone.toUtf8()), m_app->zone());
+        const auto m = sync::pullFeed(m_app->queries(), integration(QStringLiteral("ics")), feed.id, placed, from, to,
                                       QString::fromUtf8(m_app->zone().id()), now, &r, &error);
         if (m && m_app->applyExternal(*m, &error) && !r.changes.isEmpty())
             m_app->noteCalendarChanges(r.changes);

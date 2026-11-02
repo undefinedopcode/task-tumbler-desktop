@@ -10,6 +10,7 @@
 #include <QJsonObject>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QRegularExpression>
 
 namespace tumbler::sync {
 
@@ -28,6 +29,7 @@ QJsonObject FeedSettings::toJson() const
         {QStringLiteral("blocking"), nameOf(blocking)},
         {QStringLiteral("allowedTags"), QJsonArray::fromStringList(allowedTags)},
         {QStringLiteral("enabled"), enabled},
+        {QStringLiteral("dayZone"), dayZone},
     };
 }
 
@@ -42,6 +44,7 @@ FeedSettings FeedSettings::fromJson(const QJsonObject &o)
     for (const QJsonValue &t : o.value(QLatin1String("allowedTags")).toArray())
         f.allowedTags.append(t.toString());
     f.enabled = o.value(QLatin1String("enabled")).toBool(true);
+    f.dayZone = o.value(QLatin1String("dayZone")).toString();
     return f;
 }
 
@@ -97,6 +100,14 @@ QList<RemoteEvent> parseIcs(const QByteArray &ics, const FeedSettings &feed, con
     }
     std::sort(out.begin(), out.end(), [](const RemoteEvent &a, const RemoteEvent &b) { return a.externalId < b.externalId; });
     return out;
+}
+
+QString declaredZone(const QByteArray &ics)
+{
+    // A property line, possibly with parameters: X-WR-TIMEZONE;VALUE=TEXT:Europe/Paris
+    static const QRegularExpression re(QStringLiteral("^X-WR-TIMEZONE[^:\\r\\n]*:([^\\r\\n]+)"), QRegularExpression::MultilineOption);
+    const auto m = re.match(QString::fromUtf8(ics.left(64 * 1024)));
+    return m.hasMatch() ? m.captured(1).trimmed() : QString();
 }
 
 FeedFetcher::FeedFetcher(QNetworkAccessManager *network, QObject *parent)

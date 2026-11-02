@@ -20,6 +20,9 @@ struct FeedSettings {
     BlockingMode blocking = BlockingMode::BlockAll; // how its busy events treat task scheduling
     QStringList allowedTags;
     bool enabled = true;
+    // The time zone its all-day events' days are in (an IANA id); empty
+    // means this computer's. See moveAllDay().
+    QString dayZone;
 
     QJsonObject toJson() const;
     static FeedSettings fromJson(const QJsonObject &o);
@@ -29,6 +32,9 @@ struct FeedSettings {
 // cancelled events dropped, "free" (transparent) events kept but not blocking.
 QList<RemoteEvent> parseIcs(const QByteArray &ics, const FeedSettings &feed, const QDateTime &from, const QDateTime &to,
                             QString *error = nullptr);
+
+// The time zone a calendar file says it's kept in (X-WR-TIMEZONE), if any.
+QString declaredZone(const QByteArray &ics);
 
 // Gets a feed's text: http(s), webcal (as https) or a local file.
 class FeedFetcher : public QObject

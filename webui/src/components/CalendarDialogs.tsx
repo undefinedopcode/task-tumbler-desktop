@@ -1,8 +1,8 @@
 import clsx from 'clsx'
 import { CalendarDays, Loader2, Settings2 } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { call, useSignal } from '../bridge/hooks'
-import type { DeviceCalendars } from '../bridge/types'
+import type { DeviceCalendars, Feed } from '../bridge/types'
 import { Dialog, TextField } from './Dialog'
 import { Field } from './fields'
 import { Select } from './Select'
@@ -141,6 +141,152 @@ export function DeviceCalendarsDialog({ onClose }: { onClose: () => void }) {
             ))}
           </div>
         ))}
+    </Dialog>
+  )
+}
+
+const here = Intl.DateTimeFormat().resolvedOptions().timeZone
+const zones: string[] = (() => {
+  try {
+    return Intl.supportedValuesOf('timeZone')
+  } catch {
+    return []
+  }
+})()
+
+function validZone(z: string): boolean {
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: z })
+    return true
+  } catch {
+    return false
+  }
+}
+
+// The local day an all-day event on `d` in `zone` goes on: the one holding
+// its midday there (as sync::dayIn does).
+function dayHere(d: Date, zone: string): Date {
+  const guess = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 12)
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' })
+      .formatToParts(guess)
+      .map((p) => [p.type, Number(p.value)]),
+  )
+  const wall = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute)
+  return new Date(guess - (wall - guess))
+}
+
+// Where a feed comes from, without the secret part of its address.
+function source(url: string): string {
+  try {
+    const u = new URL(url.replace(/^webcals?:/, 'https:'))
+    if (u.protocol === 'http:' || u.protocol === 'https:') return `From ${u.hostname}`
+  } catch {
+    // a file path
+  }
+  return 'A file on this computer'
+}
+
+const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
+
+// A subscribed calendar's settings: name, colour, how it blocks, and the
+// time zone its all-day events' days belong to.
+export function FeedSettingsDialog({ feed, onClose }: { feed: Feed; onClose: () => void }) {
+  const [name, setName] = useState(feed.name)
+  const [color, setColor] = useState(feed.color)
+  const [blocking, setBlocking] = useState(feed.blocking || 'block_all')
+  const [zone, setZone] = useState(feed.dayZone ?? '')
+  const declared = feed.declaredZone && feed.declaredZone !== here && feed.declaredZone !== 'UTC' && validZone(feed.declaredZone) ? feed.declaredZone : ''
+  const [mode, setMode] = useState(!zone ? 'here' : zone === declared ? 'declared' : 'other')
+  const chosen = mode === 'here' ? '' : mode === 'declared' ? declared : zone.trim()
+  const ok = !chosen || validZone(chosen)
+  const example = useMemo(() => {
+    if (!chosen || !ok) return ''
+    const today = new Date()
+    const there = dayHere(today, chosen)
+    return `An all-day event on ${dayFmt.format(today)} there goes on ${dayFmt.format(there)} here.`
+  }, [chosen, ok])
+  const save = () => {
+    if (!ok) return
+    call('sync', 'updateFeed', feed.id, { name: name.trim() || feed.name, color, blocking, dayZone: chosen })
+    onClose()
+  }
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title="Calendar settings"
+      description={feed.device ? 'A calendar on this Mac.' : source(feed.url)}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" disabled={!ok} onClick={save}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <Field label="Name">
+        <TextField value={name} onChange={(e) => setName(e.target.value)} />
+      </Field>
+      <Field label="While on">
+        <Select
+          size="sm"
+          value={blocking}
+          onChange={setBlocking}
+          options={[
+            { value: 'block_all', label: 'Nothing else gets scheduled' },
+            { value: 'recurring_only', label: 'Only routines' },
+            ...(feed.blocking === 'tags_only' ? [{ value: 'tags_only', label: 'Only tasks with its tags' }] : []),
+            { value: 'none', label: 'Anything can be scheduled' },
+          ]}
+        />
+      </Field>
+      <Field label="Colour">
+        <div className="flex gap-1.5">
+          {swatches.map((c) => (
+            <button
+              key={c}
+              aria-label={c}
+              onClick={() => setColor(c)}
+              className={clsx('size-6 rounded-full transition-transform hover:scale-110', color === c && 'ring-2 ring-fg ring-offset-2 ring-offset-surface')}
+              style={{ background: c }}
+            />
+          ))}
+        </div>
+      </Field>
+      <Field label="All-day days">
+        <div className="flex flex-col gap-2">
+          <Select
+            size="sm"
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: 'here', label: `As this computer's (${here})` },
+              ...(declared ? [{ value: 'declared', label: `As the calendar's (${declared})` }] : []),
+              { value: 'other', label: 'In another time zone…' },
+            ]}
+          />
+          {mode === 'other' && (
+            <>
+              <TextField autoFocus list="tt-zones" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="America/New_York" aria-label="Time zone" />
+              <datalist id="tt-zones">
+                {zones.map((z) => (
+                  <option key={z} value={z} />
+                ))}
+              </datalist>
+            </>
+          )}
+          <p className={clsx('text-[12.5px] leading-snug', ok ? 'text-muted' : 'text-danger')}>
+            {!ok
+              ? "That isn't a time zone Task Tumbler knows. Try a city name like America/New_York."
+              : example ||
+                'For a calendar kept in another country, US holidays say: its all-day events go on the day here that holds their midday there. Timed events already show at the right time.'}
+          </p>
+        </div>
+      </Field>
     </Dialog>
   )
 }

@@ -1,10 +1,10 @@
 import clsx from 'clsx'
 import qrcode from 'qrcode-generator'
-import { CalendarDays, Copy, FolderOpen, Link2, Loader2, Plug, RefreshCw, Save, Send, Trash2, Upload, Wifi, X } from 'lucide-react'
+import { CalendarDays, Copy, Settings2, FolderOpen, Link2, Loader2, Plug, RefreshCw, Save, Send, Trash2, Upload, Wifi, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { call, useProp, useQuery } from '../bridge/hooks'
-import type { AiSettings, DeviceCalendars, RemoteState, Settings, SyncState } from '../bridge/types'
-import { DeviceCalendarsDialog, FeedDialog } from '../components/CalendarDialogs'
+import type { AiSettings, DeviceCalendars, Feed, RemoteState, Settings, SyncState } from '../bridge/types'
+import { DeviceCalendarsDialog, FeedDialog, FeedSettingsDialog } from '../components/CalendarDialogs'
 import { Segmented } from '../components/Segmented'
 import { Select } from '../components/Select'
 import { Code, Row, Section, Stepper, TextSetting } from '../components/settings'
@@ -333,6 +333,7 @@ function CalendarsSection() {
   const st = useProp<SyncState>('sync', 'state', {})
   const device = useQuery<DeviceCalendars | null>('sync', 'deviceCalendars', [], null, ['deviceCalendarsChanged'])
   const [dialog, setDialog] = useState<'feed' | 'device' | null>(null)
+  const [editing, setEditing] = useState<Feed | null>(null)
   const feeds = st.feeds ?? []
   return (
     <Section id="calendars" title="Calendars" description="Events show on your schedule and keep tasks out of busy times. Task Tumbler only reads them.">
@@ -344,6 +345,7 @@ function CalendarsSection() {
               <Dot color={f.color} className="size-2.5" />
               {f.name}
               {f.device && <span className="text-[11.5px] font-normal text-subtle">on this Mac</span>}
+              {f.dayZone && <span className="text-[11.5px] font-normal text-subtle">all-day: {f.dayZone}</span>}
             </span>
           }
           description={
@@ -360,6 +362,9 @@ function CalendarsSection() {
         >
           <div className="flex items-center gap-2">
             <Toggle checked={f.enabled} onChange={(v) => call('sync', 'updateFeed', f.id, { enabled: v })} />
+            <IconButton label="Calendar settings" size="sm" onClick={() => setEditing(f)}>
+              <Settings2 className="size-3.5" />
+            </IconButton>
             <IconButton label="Unsubscribe" size="sm" onClick={() => call('sync', 'removeFeed', f.id)}>
               <Trash2 className="size-3.5" />
             </IconButton>
@@ -383,6 +388,7 @@ function CalendarsSection() {
       </div>
       {dialog === 'feed' && <FeedDialog onClose={() => setDialog(null)} />}
       {dialog === 'device' && <DeviceCalendarsDialog onClose={() => setDialog(null)} />}
+      {editing && <FeedSettingsDialog feed={editing} onClose={() => setEditing(null)} />}
     </Section>
   )
 }

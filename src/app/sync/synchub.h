@@ -23,7 +23,7 @@ class SyncHub : public QObject
     Q_OBJECT
 
     // {syncing, linear: {enabled, user, teams, teamKeys, includeBacklog, error, lastSync, summary},
-    //  feeds: [{id, name, url, color, blocking, enabled, error, lastSync, count}]}
+    //  feeds: [{id, name, url, color, blocking, enabled, dayZone, error, lastSync, count, declaredZone}]}
     Q_PROPERTY(QVariantMap state READ state NOTIFY stateChanged)
 
 public:
@@ -106,6 +106,7 @@ private:
         QString error;
         qint64 lastSync = 0;
         int count = 0;
+        QString declaredZone; // what the calendar file says, for the settings
     };
     QHash<QString, FeedStatus> m_feedStatus;
 };

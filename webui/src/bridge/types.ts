@@ -310,6 +310,11 @@ export interface Feed {
   url: string
   color: string
   enabled: boolean
+  blocking?: string
+  // The time zone its all-day events' days are in; empty: this computer's.
+  dayZone?: string
+  // What the calendar file says it's kept in (X-WR-TIMEZONE), if anything.
+  declaredZone?: string
   error?: string
   lastSync?: number
   count?: number

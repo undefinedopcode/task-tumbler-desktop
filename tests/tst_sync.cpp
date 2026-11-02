@@ -271,6 +271,31 @@ private slots:
         QVERIFY(r.changes.isEmpty()); // all-day events don't raise alerts
     }
 
+    void allDayEventsInAnotherZone()
+    {
+        const QTimeZone sydney("Australia/Sydney"), newYork("America/New_York"), london("Europe/London");
+        // Election day in the US is the next day in Australia...
+        QCOMPARE(dayIn(QDate(2026, 11, 3), newYork, sydney), QDate(2026, 11, 4));
+        // ...and an Australian holiday is the day before in the US.
+        QCOMPARE(dayIn(QDate(2026, 1, 26), sydney, newYork), QDate(2026, 1, 25));
+        // A few hours apart, the day stays.
+        QCOMPARE(dayIn(QDate(2026, 11, 3), london, newYork), QDate(2026, 11, 3));
+
+        RemoteEvent trip;
+        trip.event.allDay = true;
+        trip.event.startDate = QDate(2026, 11, 26);
+        trip.event.endDate = QDate(2026, 11, 29);
+        RemoteEvent call;
+        call.event.startAt = kNow;
+        call.event.endAt = kNow + kHour;
+        const auto moved = moveAllDay({trip, call}, newYork, sydney);
+        QCOMPARE(moved[0].event.startDate, QDate(2026, 11, 27));
+        QCOMPARE(moved[0].event.endDate, QDate(2026, 11, 30));
+        QCOMPARE(moved[1].event.startAt, kNow); // timed events already know their zone
+        QCOMPARE(moveAllDay({trip}, sydney, sydney)[0].event.startDate, QDate(2026, 11, 26));
+        QCOMPARE(moveAllDay({trip}, QTimeZone(), sydney)[0].event.startDate, QDate(2026, 11, 26));
+    }
+
     void feedReportsChangesThatMatter()
     {
         using Kind = CalendarChange::Kind;

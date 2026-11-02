@@ -113,8 +113,19 @@ private slots:
         const FeedSettings back = FeedSettings::fromJson(f.toJson());
         QCOMPARE(back.blocking, BlockingMode::TagsOnly);
         QCOMPARE(back.allowedTags, QStringList({"calls"}));
+        QVERIFY(back.dayZone.isEmpty());
+        f.dayZone = "America/New_York";
+        QCOMPARE(FeedSettings::fromJson(f.toJson()).dayZone, QStringLiteral("America/New_York"));
         QCOMPARE(FeedFetcher::normalise(f.url).toString(), QStringLiteral("https://example.com/cal.ics"));
         QVERIFY(FeedFetcher::normalise("/home/me/cal.ics").isLocalFile());
+    }
+
+    void declaredZoneFromTheFile()
+    {
+        QCOMPARE(declaredZone("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nX-WR-TIMEZONE:America/New_York\r\nEND:VCALENDAR\r\n"),
+                 QStringLiteral("America/New_York"));
+        QCOMPARE(declaredZone("BEGIN:VCALENDAR\nX-WR-TIMEZONE;VALUE=TEXT:Europe/Paris\nEND:VCALENDAR\n"), QStringLiteral("Europe/Paris"));
+        QVERIFY(declaredZone("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n").isEmpty());
     }
 
     // ---- Linear ----

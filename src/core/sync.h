@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QString>
 #include <QStringList>
+#include <QTimeZone>
 #include <optional>
 
 // Pulling tasks and events in from other services, as plain rules over the
@@ -92,6 +93,12 @@ struct FeedResult {
     // a new place. Empty on a feed's first pull, which is all "new".
     QList<CalendarChange> changes;
 };
+
+// All-day events from a calendar kept in another time zone (US holidays seen
+// from Australia, say): each day goes on the local day that holds its
+// midday there. The 3rd in New York is the 4th in Sydney.
+QDate dayIn(const QDate &day, const QTimeZone &calendarZone, const QTimeZone &local);
+QList<RemoteEvent> moveAllDay(QList<RemoteEvent> events, const QTimeZone &calendarZone, const QTimeZone &local);
 
 // Replaces what a feed contributed between `from` and `to` (UTC ms) with
 // `events`. Events before the window stay as history.

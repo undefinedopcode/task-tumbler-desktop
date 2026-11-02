@@ -397,4 +397,22 @@ QString feedOf(const Queries &q, const QString &eventId)
     return s.exec() && s.next() ? s.value(0).toString() : QString();
 }
 
+QDate dayIn(const QDate &day, const QTimeZone &calendarZone, const QTimeZone &local)
+{
+    return QDateTime(day, QTime(12, 0), calendarZone).toTimeZone(local).date();
+}
+
+QList<RemoteEvent> moveAllDay(QList<RemoteEvent> events, const QTimeZone &calendarZone, const QTimeZone &local)
+{
+    if (!calendarZone.isValid() || calendarZone == local)
+        return events;
+    for (RemoteEvent &r : events) {
+        if (!r.event.allDay)
+            continue;
+        r.event.startDate = dayIn(r.event.startDate, calendarZone, local);
+        r.event.endDate = std::max(r.event.startDate, dayIn(r.event.endDate, calendarZone, local));
+    }
+    return events;
+}
+
 } // namespace tumbler::sync
