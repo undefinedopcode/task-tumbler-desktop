@@ -93,8 +93,11 @@ QList<RemoteEvent> parseIcs(const QByteArray &ics, const FeedSettings &feed, con
             r.event.startAt = start.toMSecsSinceEpoch();
             r.event.endAt = std::max(end.toMSecsSinceEpoch(), r.event.startAt);
         }
-        // "Show as free" events are information, not commitments.
-        r.event.blocking.mode = event->transparency() == KCalendarCore::Event::Transparent ? BlockingMode::None : feed.blocking;
+        // "Show as free" events are information, not commitments. So are
+        // all-day ones (holidays, birthdays): busy is the default in iCalendar,
+        // and taking the whole day left nothing to plan.
+        r.event.blocking.mode = r.event.allDay || event->transparency() == KCalendarCore::Event::Transparent ? BlockingMode::None
+                                                                                                          : feed.blocking;
         r.event.blocking.allowedTags = feed.allowedTags;
         out.append(r);
     }

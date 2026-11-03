@@ -82,6 +82,7 @@ private slots:
         QVERIFY(trip->event.allDay);
         QCOMPARE(trip->event.startDate, QDate(2026, 11, 5));
         QCOMPARE(trip->event.endDate, QDate(2026, 11, 7)); // DTEND is exclusive in iCal
+        QCOMPARE(trip->event.blocking.mode, BlockingMode::None); // all-day: holidays and the like don't take the day
 
         QCOMPARE(find(events, "focus")->event.blocking.mode, BlockingMode::None);
         QCOMPARE(find(events, "nyc")->event.blocking.mode, BlockingMode::BlockAll);

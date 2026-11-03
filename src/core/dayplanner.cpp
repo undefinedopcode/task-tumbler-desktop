@@ -279,8 +279,12 @@ DayPlan planDay(const Queries &q, const PlanOptions &options, const QTimeZone &z
             reason = QStringLiteral("Waiting on something that isn't done yet");
         else if (plan.blocks.size() >= options.maxBlocks)
             reason = QStringLiteral("Today is full enough");
-        else
-            reason = QStringLiteral("No room left in its category's hours today");
+        else {
+            const auto allDay = std::find_if(events.cbegin(), events.cend(),
+                                             [&t](const Event &e) { return e.allDay && !e.blocking.allows(false, t.tags); });
+            reason = allDay != events.cend() ? QStringLiteral("“%1” takes the whole day").arg(allDay->title)
+                                             : QStringLiteral("No room left in its category's hours today");
+        }
         plan.unplaced.append({t.id, t.title, reason});
     }
 

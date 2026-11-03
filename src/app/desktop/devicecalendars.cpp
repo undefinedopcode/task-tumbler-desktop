@@ -38,8 +38,9 @@ QList<sync::RemoteEvent> toRemoteEvents(const QList<Occurrence> &occurrences, co
             r.event.startAt = o.start;
             r.event.endAt = std::max(o.end, o.start);
         }
-        // "Show as free" events are information, not commitments.
-        r.event.blocking.mode = o.free ? BlockingMode::None : feed.blocking;
+        // "Show as free" events are information, not commitments. So are
+        // all-day ones (holidays, birthdays), which would take the whole day.
+        r.event.blocking.mode = o.free || o.allDay ? BlockingMode::None : feed.blocking;
         r.event.blocking.allowedTags = feed.allowedTags;
         out.append(r);
     }

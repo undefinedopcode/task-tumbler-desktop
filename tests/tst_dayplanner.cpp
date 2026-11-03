@@ -174,6 +174,17 @@ private slots:
         QCOMPARE(layout(planDay(Queries(m_db->handle()), options(), kZone)), QStringList({"09:00-09:30 call", "10:00-10:30 deep"}));
     }
 
+    void allDayEventsSayWhyTheDayIsFull()
+    {
+        add("a", 30);
+        QSqlQuery(m_db->handle()).exec(QStringLiteral(
+            "INSERT INTO events (id, title, is_all_day, start_date, end_date, blocking_mode, allowed_tags, created_at, updated_at) "
+            "VALUES ('e', 'Off sick', 1, '%1', '%1', 'block_all', '[]', 0, 0)").arg(kDay.toString(Qt::ISODate)));
+        const DayPlan p = planDay(Queries(m_db->handle()), options(), kZone);
+        QVERIFY(p.blocks.isEmpty());
+        QCOMPARE(p.unplaced.first().reason, QStringLiteral("“Off sick” takes the whole day"));
+    }
+
     void notBeforeNow()
     {
         add("a", 30);
