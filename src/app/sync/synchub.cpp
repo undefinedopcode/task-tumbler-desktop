@@ -249,10 +249,26 @@ void SyncHub::syncLinear(std::function<void()> done)
             }
             const QString id = integration(QStringLiteral("linear"));
             const QStringList gone = sync::missing(m_app->queries(), id, issues);
-            m_linear.whatBecameOf(gone, filter, [this, id, issues, finish](const QHash<QString, sync::Gone> &what, const QString &) {
+            m_linear.whatBecameOf(gone, filter, [this, id, issues, finish](const QHash<QString, sync::Gone> &what,
+                                                                           const QHash<QString, sync::Worked> &worked, const QString &) {
                 sync::PullResult r;
                 QString error;
-                const auto m = sync::pullTasks(m_app->queries(), id, issues, what, m_app->now(), &r, &error);
+                const Queries q = m_app->queries();
+                auto m = sync::pullTasks(q, id, issues, what, m_app->now(), &r, &error);
+                // Closed there without the timer here: the time still counts.
+                int logged = 0;
+                if (m) {
+                    QList<Mutation> parts{*m};
+                    for (auto it = r.completedThere.cbegin(); it != r.completedThere.cend(); ++it) {
+                        int minutes = 0;
+                        if (const auto log = sync::logWorkedThere(q, it.key(), worked.value(it.value()), QStringLiteral("Linear"),
+                                                                  m_app->zone(), m_app->now(), &minutes)) {
+                            parts.append(*log);
+                            logged += minutes;
+                        }
+                    }
+                    m = combine(m->text, parts);
+                }
                 if (!m || !m_app->applyExternal(*m, &error)) {
                     m_linearError = QStringLiteral("couldn't save what came from Linear: %1").arg(error);
                     finish();
@@ -267,6 +283,8 @@ void SyncHub::syncLinear(std::function<void()> done)
                     parts.append(plural(r.updated, QStringLiteral("update"), QStringLiteral("updates")));
                 if (r.closed)
                     parts.append(plural(r.closed, QStringLiteral("closed"), QStringLiteral("closed")));
+                if (logged)
+                    parts.append(QStringLiteral("%1 min logged").arg(logged));
                 m_linearSummary = parts.isEmpty() ? QStringLiteral("Up to date") : parts.join(QStringLiteral(", "));
                 if (r.created || r.closed)
                     Q_EMIT m_app->message(QStringLiteral("Linear: %1").arg(m_linearSummary));

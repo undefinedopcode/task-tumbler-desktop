@@ -219,6 +219,8 @@ std::optional<Mutation> pullTasks(const Queries &q, const QString &integrationId
                          QStringLiteral("INSERT INTO task_history (id, task_id, action, at, details) VALUES (?, ?, 'sync_closed', ?, ?)"),
                          {newId(), task->id, now, historyJson({{QStringLiteral("reason"), reason}})}));
         parts.append(unlink);
+        if (what == Gone::Completed)
+            r.completedThere.insert(task->id, link.externalId);
         r.notes.append(QStringLiteral("“%1”: %2").arg(task->title, reason));
         ++r.closed;
     }
@@ -226,6 +228,58 @@ std::optional<Mutation> pullTasks(const Queries &q, const QString &integrationId
     if (result)
         *result = r;
     return combine(QStringLiteral("Sync"), parts);
+}
+
+std::optional<Mutation> logWorkedThere(const Queries &q, const QString &taskId, const Worked &worked, const QString &service,
+                                       const QTimeZone &zone, qint64 now, int *minutes)
+{
+    constexpr qint64 kMinute = 60 * 1000;
+    const auto task = q.task(taskId);
+    if (!task || task->isRecurring() || worked.completedAt <= 0)
+        return std::nullopt;
+    if (!q.workLogsForTask(taskId).isEmpty())
+        return std::nullopt; // the timer has it
+
+    const qint64 end = std::min(worked.completedAt, now);
+    qint64 start = end - qint64(std::max(5, task->estimateMinutes)) * kMinute;
+    if (worked.startedAt > start && worked.startedAt < end)
+        start = std::min(worked.startedAt, end - 5 * kMinute); // picked up and closed quickly
+
+    const QDate day = QDateTime::fromMSecsSinceEpoch(end, zone).date();
+    const qint64 dayStart = QDateTime(day, QTime(0, 0), zone).toMSecsSinceEpoch();
+    const qint64 dayEnd = QDateTime(day.addDays(1), QTime(0, 0), zone).toMSecsSinceEpoch();
+    QString blockId;
+    for (const ScheduleBlock &s : q.schedulesForTask(taskId)) {
+        if (s.end <= dayStart || s.start >= dayEnd)
+            continue;
+        if (s.completed)
+            return std::nullopt; // already shown as done that day
+        if (blockId.isEmpty())
+            blockId = s.id;
+    }
+
+    const QString logId = newId();
+    const QString notes = QStringLiteral("Closed in %1").arg(service);
+    const int length = int((end - start + kMinute / 2) / kMinute);
+    QList<Mutation> parts{raw({{QStringLiteral("work_logs"), QStringLiteral("id = ?"), {logId}}},
+                              QStringLiteral("INSERT INTO work_logs (id, task_id, started_at, ended_at, duration_minutes, notes, created_at) "
+                                             "VALUES (?, ?, ?, ?, ?, ?, ?)"),
+                              {logId, taskId, start, end, length, notes, now})};
+    const Scope blocks{QStringLiteral("schedules"), QStringLiteral("task_id = ?"), {taskId}};
+    if (blockId.isEmpty()) {
+        parts.append(raw({blocks},
+                         QStringLiteral("INSERT INTO schedules (id, task_id, scheduled_start, scheduled_end, actual_start, actual_end, "
+                                        "completed, work_log_id, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)"),
+                         {newId(), taskId, start, end, start, end, logId, now}));
+    } else {
+        parts.append(raw({blocks},
+                         QStringLiteral("UPDATE schedules SET completed = 1, scheduled_start = ?, scheduled_end = ?, actual_start = ?, "
+                                        "actual_end = ?, work_log_id = ? WHERE id = ?"),
+                         {start, end, start, end, logId, blockId}));
+    }
+    if (minutes)
+        *minutes = length;
+    return combine(QStringLiteral("Log work on “%1”").arg(task->title), parts);
 }
 
 QList<PendingPush> pendingCompletions(const Queries &q, const QString &integrationId)

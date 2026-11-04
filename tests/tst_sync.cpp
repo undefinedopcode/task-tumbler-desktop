@@ -144,6 +144,53 @@ private slots:
         QCOMPARE(scalar(db(), "SELECT COUNT(*) FROM task_history WHERE action = 'sync_closed'").toInt(), 3);
     }
 
+    void doneThereIsReportedForLogging()
+    {
+        pull({issue("ENG-1", "a"), issue("ENG-2", "b")});
+        const QString a = taskFor("ENG-1");
+        const PullResult r = pull({}, {{"ENG-1", Gone::Completed}, {"ENG-2", Gone::Cancelled}});
+        QCOMPARE(r.completedThere, (QHash<QString, QString>{{a, "ENG-1"}})); // cancelled isn't work done
+    }
+
+    void workedThereBecomesABlock()
+    {
+        const QTimeZone zone("Australia/Sydney");
+        constexpr qint64 kMin = 60'000;
+        const qint64 done = kNow - 2 * kHour;
+        pull({issue("ENG-1", "quick"), issue("ENG-2", "planned"), issue("ENG-3", "timed"), issue("ENG-4", "estimate")});
+        const QString quick = taskFor("ENG-1"), planned = taskFor("ENG-2"), timed = taskFor("ENG-3"), estimate = taskFor("ENG-4");
+        run(ops::updateTask(q(), estimate, {{"time_estimate_minutes", 45}}, kNow));
+        run(ops::scheduleTask("block", planned, done + kHour, done + 2 * kHour, kNow)); // planned for later that day
+        run(ops::logWork(timed, "log", done - kHour, done - kHour / 2, {}, kNow));
+
+        // Started there 10 minutes before it was done: 10 minutes, not the 30 estimate.
+        int minutes = 0;
+        run(logWorkedThere(q(), quick, {done - 10 * kMin, done}, "Linear", zone, kNow, &minutes));
+        QCOMPARE(minutes, 10);
+        QCOMPARE(scalar(db(), "SELECT COUNT(*) FROM schedules WHERE completed = 1 AND task_id = '" + quick + "'").toInt(), 1);
+        QCOMPARE(scalar(db(), "SELECT scheduled_start FROM schedules WHERE task_id = '" + quick + "'").toLongLong(), done - 10 * kMin);
+        QCOMPARE(scalar(db(), "SELECT notes FROM work_logs WHERE task_id = '" + quick + "'").toString(), QStringLiteral("Closed in Linear"));
+
+        // Planned that day: the block moves to when it was done.
+        run(logWorkedThere(q(), planned, {0, done}, "Linear", zone, kNow, &minutes));
+        QCOMPARE(minutes, 30);
+        QCOMPARE(q().schedulesForTask(planned).size(), 1);
+        const ScheduleBlock b = q().schedulesForTask(planned).first();
+        QVERIFY(b.completed);
+        QCOMPARE(b.start, done - 30 * kMin);
+        QCOMPARE(b.end, done);
+        QVERIFY(!b.workLogId.isEmpty());
+
+        // Started days ago: as long as its estimate.
+        run(logWorkedThere(q(), estimate, {done - 72 * kHour, done}, "Linear", zone, kNow, &minutes));
+        QCOMPARE(minutes, 45);
+
+        // The timer has it; and a second sync doesn't log it twice.
+        QVERIFY(!logWorkedThere(q(), timed, {0, done}, "Linear", zone, kNow));
+        QVERIFY(!logWorkedThere(q(), quick, {0, done}, "Linear", zone, kNow));
+        QVERIFY(!logWorkedThere(q(), quick, {0, 0}, "Linear", zone, kNow)); // no completion time
+    }
+
     void deletedHereStaysDeleted()
     {
         pull({issue("ENG-1", "noisy")});

@@ -1,5 +1,6 @@
 #include "linear.h"
 
+#include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QNetworkReply>
@@ -144,22 +145,27 @@ void LinearClient::page(const LinearFilter &filter, const QString &after, std::s
 }
 
 void LinearClient::whatBecameOf(const QStringList &ids, const LinearFilter &filter,
-                                std::function<void(const QHash<QString, Gone> &, const QString &)> done)
+                                std::function<void(const QHash<QString, Gone> &, const QHash<QString, Worked> &, const QString &)> done)
 {
     if (ids.isEmpty()) {
-        done({}, {});
+        done({}, {}, {});
         return;
     }
     const QStringList batch = ids.mid(0, 100); // the rest are asked about next sync
     query(QStringLiteral("query Check($ids: [ID!]) { issues(filter: { id: { in: $ids } }, includeArchived: true, first: 100) "
-                         "{ nodes { id archivedAt state { type } assignee { isMe } team { key } } } }"),
+                         "{ nodes { id archivedAt startedAt completedAt state { type } assignee { isMe } team { key } } } }"),
           {{QStringLiteral("ids"), QJsonArray::fromStringList(batch)}},
           [batch, filter, done](const QJsonObject &data, const QString &error, bool) {
               QHash<QString, Gone> gone;
+              QHash<QString, Worked> worked;
               if (!error.isEmpty()) {
-                  done(gone, error);
+                  done(gone, worked, error);
                   return;
               }
+              const auto ms = [](const QJsonValue &v) {
+                  const QDateTime t = QDateTime::fromString(v.toString(), Qt::ISODateWithMs);
+                  return t.isValid() ? t.toMSecsSinceEpoch() : qint64(0);
+              };
               for (const QString &id : batch)
                   gone.insert(id, Gone::Cancelled); // not returned at all: deleted
               for (const QJsonValue &v : data.value(QLatin1String("issues")).toObject().value(QLatin1String("nodes")).toArray()) {
@@ -168,8 +174,10 @@ void LinearClient::whatBecameOf(const QStringList &ids, const LinearFilter &filt
                   const QString state = n.value(QLatin1String("state")).toObject().value(QLatin1String("type")).toString();
                   const bool mine = n.value(QLatin1String("assignee")).toObject().value(QLatin1String("isMe")).toBool();
                   const QString team = n.value(QLatin1String("team")).toObject().value(QLatin1String("key")).toString();
-                  if (state == QLatin1String("completed"))
+                  if (state == QLatin1String("completed")) {
                       gone.insert(id, Gone::Completed);
+                      worked.insert(id, {ms(n.value(QLatin1String("startedAt"))), ms(n.value(QLatin1String("completedAt")))});
+                  }
                   else if (state == QLatin1String("canceled") || !n.value(QLatin1String("archivedAt")).isNull())
                       gone.insert(id, Gone::Cancelled);
                   else if (!mine || !filter.stateTypes.contains(state) || (!filter.teamKeys.isEmpty() && !filter.teamKeys.contains(team)))
@@ -177,7 +185,7 @@ void LinearClient::whatBecameOf(const QStringList &ids, const LinearFilter &filt
                   else
                       gone.insert(id, Gone::Unknown); // still matches; it was past the limit
               }
-              done(gone, {});
+              done(gone, worked, {});
           });
 }
 

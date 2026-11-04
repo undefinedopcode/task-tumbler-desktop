@@ -37,9 +37,10 @@ public:
     void viewer(std::function<void(const QString &name, const QVariantList &teams, const QString &error, bool authFailed)> done);
     void activeIssues(const LinearFilter &filter,
                       std::function<void(const QList<RemoteTask> &issues, const QString &error, bool authFailed)> done);
-    // For issues no longer in activeIssues(): done, cancelled, or just not yours now.
+    // For issues no longer in activeIssues(): done, cancelled, or just not
+    // yours now, and for the done ones, when they were started and completed.
     void whatBecameOf(const QStringList &ids, const LinearFilter &filter,
-                      std::function<void(const QHash<QString, Gone> &gone, const QString &error)> done);
+                      std::function<void(const QHash<QString, Gone> &gone, const QHash<QString, Worked> &worked, const QString &error)> done);
     // Moves the issue to its team's first "completed" state.
     void complete(const QString &id, std::function<void(const QString &error)> done);
 

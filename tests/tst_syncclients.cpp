@@ -207,16 +207,21 @@ private slots:
             return QJsonObject{{"id", id}, {"state", QJsonObject{{"type", state}}}, {"assignee", QJsonObject{{"isMe", mine}}},
                                {"team", QJsonObject{{"key", "ENG"}}}, {"archivedAt", archived}};
         };
+        QJsonObject done = node("done", "completed", true);
+        done.insert("startedAt", "2026-11-05T01:00:00.000Z");
+        done.insert("completedAt", "2026-11-05T01:40:00.000Z");
         server.reply(200, {{"data", QJsonObject{{"issues", QJsonObject{{"nodes", QJsonArray{
-                                                                node("done", "completed", true), node("nope", "canceled", true),
+                                                                done, node("nope", "canceled", true),
                                                                 node("theirs", "started", false), node("later", "backlog", true),
                                                                 node("archived", "started", true, "2026-10-01T00:00:00Z")}}}}}}});
         QHash<QString, Gone> gone;
+        QHash<QString, Worked> worked;
         bool finished = false;
         client.whatBecameOf({"done", "nope", "theirs", "later", "archived", "deleted"}, LinearFilter(),
-                            [&](const QHash<QString, Gone> &g, const QString &error) {
+                            [&](const QHash<QString, Gone> &g, const QHash<QString, Worked> &w, const QString &error) {
                                 QVERIFY(error.isEmpty());
                                 gone = g;
+                                worked = w;
                                 finished = true;
                             });
         QTRY_VERIFY(finished);
@@ -226,6 +231,9 @@ private slots:
         QCOMPARE(gone.value("later"), Gone::Elsewhere);
         QCOMPARE(gone.value("archived"), Gone::Cancelled);
         QCOMPARE(gone.value("deleted"), Gone::Cancelled);
+        QCOMPARE(worked.size(), 1); // only the done one
+        QCOMPARE(worked.value("done").startedAt, QDateTime(QDate(2026, 11, 5), QTime(1, 0), QTimeZone::UTC).toMSecsSinceEpoch());
+        QCOMPARE(worked.value("done").completedAt, QDateTime(QDate(2026, 11, 5), QTime(1, 40), QTimeZone::UTC).toMSecsSinceEpoch());
     }
 
     void linearCompletePicksFirstDoneState()

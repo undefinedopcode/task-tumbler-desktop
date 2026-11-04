@@ -55,7 +55,24 @@ struct PullResult {
     int closed = 0;
     int unchanged = 0;
     QStringList notes; // one line per closed task, for the sync summary
+    QHash<QString, QString> completedThere; // task id -> external id, for tasks closed because they were done there
 };
+
+// When an item was in progress and finished on the service (UTC ms; 0 when
+// it never was).
+struct Worked {
+    qint64 startedAt = 0;
+    qint64 completedAt = 0;
+};
+
+// The time spent on a linked task that was finished there with no timer
+// running here, so the schedule and time worked show it: a finished block
+// (that day's planned one, moved to fit, or a new one) with a work log,
+// ending when it was completed and as long as its estimate, or as long as
+// it was in progress there when that's shorter. Nothing when a timer has
+// already tracked it, or that day already has a finished block for it.
+std::optional<Mutation> logWorkedThere(const Queries &q, const QString &taskId, const Worked &worked, const QString &service,
+                                       const QTimeZone &zone, qint64 now, int *minutes = nullptr);
 
 // The integration row for a provider, created if missing. Not undoable.
 std::optional<QString> ensureIntegration(QSqlDatabase db, const QString &provider, qint64 now, QString *error = nullptr);
