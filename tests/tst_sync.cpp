@@ -191,6 +191,39 @@ private slots:
         QVERIFY(!logWorkedThere(q(), quick, {0, 0}, "Linear", zone, kNow)); // no completion time
     }
 
+    void finishedBetweenSyncsComeInDone()
+    {
+        constexpr qint64 kMin = 60'000;
+        const qint64 done = kNow - kHour;
+        pull({issue("ENG-1", "linked")});
+        const auto finished = [&](const QString &id, const QString &title, qint64 started) {
+            return FinishedRemote{issue(id, title), {started, done}};
+        };
+        int created = 0, minutes = 0;
+        run(pullFinished(q(), m_linear,
+                         {finished("ENG-1", "linked", 0), finished("ENG-9", "Hotfix", done - 20 * kMin), finished("ENG-9", "Hotfix", 0)},
+                         "Linear", kNow, &created, &minutes));
+        QCOMPARE(created, 1); // the linked one is the pull's to close; the repeat is skipped
+        QCOMPARE(minutes, 20);
+        const QString id = scalar(db(), "SELECT id FROM tasks WHERE title = 'Hotfix'").toString();
+        QCOMPARE(q().task(id)->status, TaskStatus::Completed);
+        QCOMPARE(q().task(id)->tags, QStringList({"linear", "linear:ENG"}));
+        QCOMPARE(scalar(db(), "SELECT at FROM task_history WHERE action = 'completed' AND task_id = '" + id + "'").toLongLong(), done);
+        QCOMPARE(scalar(db(), "SELECT target FROM task_actions WHERE task_id = '" + id + "'").toString(),
+                 QStringLiteral("https://linear.app/acme/issue/ENG-9"));
+        const ScheduleBlock b = q().schedulesForTask(id).first();
+        QVERIFY(b.completed);
+        QCOMPARE(b.start, done - 20 * kMin);
+        QCOMPARE(b.end, done);
+        QCOMPARE(scalar(db(), "SELECT COUNT(*) FROM synced_items WHERE external_id = 'ENG-9'").toInt(), 0); // closed, so not linked
+
+        // The next sync overlaps a little: already here, so nothing new.
+        QVERIFY(!pullFinished(q(), m_linear, {finished("ENG-9", "Hotfix", 0)}, "Linear", kNow));
+        // Nor one that was linked and closed by an earlier pull (its link is gone, its task opens it).
+        run(pullTasks(q(), m_linear, {}, {{"ENG-1", Gone::Completed}}, kNow, nullptr));
+        QVERIFY(!pullFinished(q(), m_linear, {finished("ENG-1", "linked", 0)}, "Linear", kNow));
+    }
+
     void deletedHereStaysDeleted()
     {
         pull({issue("ENG-1", "noisy")});

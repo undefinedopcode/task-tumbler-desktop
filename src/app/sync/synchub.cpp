@@ -14,6 +14,8 @@ namespace {
 
 SyncHub *s_instance = nullptr;
 const QString kLinearKey = QStringLiteral("linear-api-key");
+// Issues completed after this (UTC ms) are looked for on the next sync.
+const QString kLinearDoneSince = QStringLiteral("linear_done_since");
 constexpr qint64 kDay = 24 * 3600 * 1000LL;
 constexpr int kEveryMs = 15 * 60 * 1000;
 constexpr int kFeedsEveryMs = 5 * 60 * 1000;
@@ -206,6 +208,7 @@ void SyncHub::disconnectLinear()
     QJsonObject s = linearSettings();
     s.insert(QStringLiteral("enabled"), false);
     saveLinearSettings(s);
+    m_app->applyExternal(ops::setSetting(kLinearDoneSince, 0)); // connecting again starts counting afresh
 }
 
 void SyncHub::setLinearTeams(const QStringList &keys)
@@ -249,50 +252,78 @@ void SyncHub::syncLinear(std::function<void()> done)
             }
             const QString id = integration(QStringLiteral("linear"));
             const QStringList gone = sync::missing(m_app->queries(), id, issues);
-            m_linear.whatBecameOf(gone, filter, [this, id, issues, finish](const QHash<QString, sync::Gone> &what,
-                                                                           const QHash<QString, sync::Worked> &worked, const QString &) {
-                sync::PullResult r;
-                QString error;
-                const Queries q = m_app->queries();
-                auto m = sync::pullTasks(q, id, issues, what, m_app->now(), &r, &error);
-                // Closed there without the timer here: the time still counts.
-                int logged = 0;
-                if (m) {
-                    QList<Mutation> parts{*m};
-                    for (auto it = r.completedThere.cbegin(); it != r.completedThere.cend(); ++it) {
-                        int minutes = 0;
-                        if (const auto log = sync::logWorkedThere(q, it.key(), worked.value(it.value()), QStringLiteral("Linear"),
-                                                                  m_app->zone(), m_app->now(), &minutes)) {
-                            parts.append(*log);
-                            logged += minutes;
-                        }
-                    }
-                    m = combine(m->text, parts);
-                }
-                if (!m || !m_app->applyExternal(*m, &error)) {
-                    m_linearError = QStringLiteral("couldn't save what came from Linear: %1").arg(error);
+            m_linear.whatBecameOf(gone, filter, [this, id, filter, issues, finish](const QHash<QString, sync::Gone> &what,
+                                                                                   const QHash<QString, sync::Worked> &worked,
+                                                                                   const QString &) {
+                // Picked up and closed since the last sync, so never seen here.
+                // The first sync only starts counting from now.
+                const qint64 since = qint64(m_app->queries().setting(kLinearDoneSince, 0).toDouble());
+                const qint64 asked = m_app->now();
+                const auto pull = [this, id, issues, what, worked, since, asked, finish](const QList<sync::FinishedRemote> &finished,
+                                                                                        const QString &doneError) {
+                    pullLinear(id, issues, what, worked, finished,
+                               // A few minutes' overlap for clock skew; what's seen twice is skipped.
+                               doneError.isEmpty() || since <= 0 ? asked - 5 * 60 * 1000 : since);
                     finish();
-                    return;
-                }
-                m_linearError.clear();
-                m_linearLast = m_app->now();
-                QStringList parts;
-                if (r.created)
-                    parts.append(plural(r.created, QStringLiteral("new task"), QStringLiteral("new tasks")));
-                if (r.updated)
-                    parts.append(plural(r.updated, QStringLiteral("update"), QStringLiteral("updates")));
-                if (r.closed)
-                    parts.append(plural(r.closed, QStringLiteral("closed"), QStringLiteral("closed")));
-                if (logged)
-                    parts.append(QStringLiteral("%1 min logged").arg(logged));
-                m_linearSummary = parts.isEmpty() ? QStringLiteral("Up to date") : parts.join(QStringLiteral(", "));
-                if (r.created || r.closed)
-                    Q_EMIT m_app->message(QStringLiteral("Linear: %1").arg(m_linearSummary));
-                finish();
-                pushCompletions();
+                };
+                if (since <= 0)
+                    pull({}, {});
+                else
+                    m_linear.completedSince(since, filter, pull);
             });
         });
     });
+}
+
+void SyncHub::pullLinear(const QString &id, const QList<sync::RemoteTask> &issues, const QHash<QString, sync::Gone> &what,
+                         const QHash<QString, sync::Worked> &worked, const QList<sync::FinishedRemote> &finished, qint64 nextSince)
+{
+    sync::PullResult r;
+    QString error;
+    const Queries q = m_app->queries();
+    const qint64 now = m_app->now();
+    auto m = sync::pullTasks(q, id, issues, what, now, &r, &error);
+    // Closed there without the timer here: the time still counts.
+    int logged = 0, doneThere = 0;
+    if (m) {
+        QList<Mutation> parts{*m};
+        for (auto it = r.completedThere.cbegin(); it != r.completedThere.cend(); ++it) {
+            int minutes = 0;
+            if (const auto log = sync::logWorkedThere(q, it.key(), worked.value(it.value()), QStringLiteral("Linear"), m_app->zone(), now,
+                                                      &minutes)) {
+                parts.append(*log);
+                logged += minutes;
+            }
+        }
+        int minutes = 0;
+        if (const auto added = sync::pullFinished(q, id, finished, QStringLiteral("Linear"), now, &doneThere, &minutes)) {
+            parts.append(*added);
+            logged += minutes;
+        }
+        parts.append(ops::setSetting(kLinearDoneSince, double(nextSince)));
+        m = combine(m->text, parts);
+    }
+    if (!m || !m_app->applyExternal(*m, &error)) {
+        m_linearError = QStringLiteral("couldn't save what came from Linear: %1").arg(error);
+        return;
+    }
+    m_linearError.clear();
+    m_linearLast = now;
+    QStringList parts;
+    if (r.created)
+        parts.append(plural(r.created, QStringLiteral("new task"), QStringLiteral("new tasks")));
+    if (r.updated)
+        parts.append(plural(r.updated, QStringLiteral("update"), QStringLiteral("updates")));
+    if (r.closed)
+        parts.append(plural(r.closed, QStringLiteral("closed"), QStringLiteral("closed")));
+    if (doneThere)
+        parts.append(QStringLiteral("%1 done in Linear").arg(doneThere));
+    if (logged)
+        parts.append(QStringLiteral("%1 min logged").arg(logged));
+    m_linearSummary = parts.isEmpty() ? QStringLiteral("Up to date") : parts.join(QStringLiteral(", "));
+    if (r.created || r.closed || doneThere)
+        Q_EMIT m_app->message(QStringLiteral("Linear: %1").arg(m_linearSummary));
+    pushCompletions();
 }
 
 void SyncHub::pushCompletions()

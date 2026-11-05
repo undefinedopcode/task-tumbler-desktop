@@ -230,22 +230,54 @@ std::optional<Mutation> pullTasks(const Queries &q, const QString &integrationId
     return combine(QStringLiteral("Sync"), parts);
 }
 
+namespace {
+
+// The work log and finished block for time spent on `task` there; `blockId`
+// is that day's planned block to move, if any.
+Mutation workedParts(const Task &task, const QString &blockId, const Worked &worked, const QString &service, qint64 now,
+                     int *minutes)
+{
+    constexpr qint64 kMinute = 60 * 1000;
+    const qint64 end = std::min(worked.completedAt, now);
+    qint64 start = end - qint64(std::max(5, task.estimateMinutes)) * kMinute;
+    if (worked.startedAt > start && worked.startedAt < end)
+        start = std::min(worked.startedAt, end - 5 * kMinute); // picked up and closed quickly
+
+    const QString logId = newId();
+    const int length = int((end - start + kMinute / 2) / kMinute);
+    QList<Mutation> parts{raw({{QStringLiteral("work_logs"), QStringLiteral("id = ?"), {logId}}},
+                              QStringLiteral("INSERT INTO work_logs (id, task_id, started_at, ended_at, duration_minutes, notes, created_at) "
+                                             "VALUES (?, ?, ?, ?, ?, ?, ?)"),
+                              {logId, task.id, start, end, length, QStringLiteral("Closed in %1").arg(service), now})};
+    const Scope blocks{QStringLiteral("schedules"), QStringLiteral("task_id = ?"), {task.id}};
+    if (blockId.isEmpty()) {
+        parts.append(raw({blocks},
+                         QStringLiteral("INSERT INTO schedules (id, task_id, scheduled_start, scheduled_end, actual_start, actual_end, "
+                                        "completed, work_log_id, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)"),
+                         {newId(), task.id, start, end, start, end, logId, now}));
+    } else {
+        parts.append(raw({blocks},
+                         QStringLiteral("UPDATE schedules SET completed = 1, scheduled_start = ?, scheduled_end = ?, actual_start = ?, "
+                                        "actual_end = ?, work_log_id = ? WHERE id = ?"),
+                         {start, end, start, end, logId, blockId}));
+    }
+    if (minutes)
+        *minutes = length;
+    return combine(QStringLiteral("Log work on “%1”").arg(task.title), parts);
+}
+
+} // namespace
+
 std::optional<Mutation> logWorkedThere(const Queries &q, const QString &taskId, const Worked &worked, const QString &service,
                                        const QTimeZone &zone, qint64 now, int *minutes)
 {
-    constexpr qint64 kMinute = 60 * 1000;
     const auto task = q.task(taskId);
     if (!task || task->isRecurring() || worked.completedAt <= 0)
         return std::nullopt;
     if (!q.workLogsForTask(taskId).isEmpty())
         return std::nullopt; // the timer has it
 
-    const qint64 end = std::min(worked.completedAt, now);
-    qint64 start = end - qint64(std::max(5, task->estimateMinutes)) * kMinute;
-    if (worked.startedAt > start && worked.startedAt < end)
-        start = std::min(worked.startedAt, end - 5 * kMinute); // picked up and closed quickly
-
-    const QDate day = QDateTime::fromMSecsSinceEpoch(end, zone).date();
+    const QDate day = QDateTime::fromMSecsSinceEpoch(std::min(worked.completedAt, now), zone).date();
     const qint64 dayStart = QDateTime(day, QTime(0, 0), zone).toMSecsSinceEpoch();
     const qint64 dayEnd = QDateTime(day.addDays(1), QTime(0, 0), zone).toMSecsSinceEpoch();
     QString blockId;
@@ -257,29 +289,62 @@ std::optional<Mutation> logWorkedThere(const Queries &q, const QString &taskId, 
         if (blockId.isEmpty())
             blockId = s.id;
     }
+    return workedParts(*task, blockId, worked, service, now, minutes);
+}
 
-    const QString logId = newId();
-    const QString notes = QStringLiteral("Closed in %1").arg(service);
-    const int length = int((end - start + kMinute / 2) / kMinute);
-    QList<Mutation> parts{raw({{QStringLiteral("work_logs"), QStringLiteral("id = ?"), {logId}}},
-                              QStringLiteral("INSERT INTO work_logs (id, task_id, started_at, ended_at, duration_minutes, notes, created_at) "
-                                             "VALUES (?, ?, ?, ?, ?, ?, ?)"),
-                              {logId, taskId, start, end, length, notes, now})};
-    const Scope blocks{QStringLiteral("schedules"), QStringLiteral("task_id = ?"), {taskId}};
-    if (blockId.isEmpty()) {
-        parts.append(raw({blocks},
-                         QStringLiteral("INSERT INTO schedules (id, task_id, scheduled_start, scheduled_end, actual_start, actual_end, "
-                                        "completed, work_log_id, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)"),
-                         {newId(), taskId, start, end, start, end, logId, now}));
-    } else {
-        parts.append(raw({blocks},
-                         QStringLiteral("UPDATE schedules SET completed = 1, scheduled_start = ?, scheduled_end = ?, actual_start = ?, "
-                                        "actual_end = ?, work_log_id = ? WHERE id = ?"),
-                         {start, end, start, end, logId, blockId}));
+std::optional<Mutation> pullFinished(const Queries &q, const QString &integrationId, const QList<FinishedRemote> &finished,
+                                     const QString &service, qint64 now, int *created, int *minutes)
+{
+    // Seen before: linked (open, or deleted here), or a task that opens it.
+    const QHash<QString, Link> existing = links(q, integrationId);
+    QSet<QString> urls;
+    QSqlQuery s(q.db());
+    s.exec(QStringLiteral("SELECT target FROM task_actions WHERE kind = 'url'"));
+    while (s.next())
+        urls.insert(s.value(0).toString());
+
+    const auto category = q.defaultCategory();
+    QList<Mutation> parts;
+    QSet<QString> seen;
+    int count = 0, total = 0;
+    for (const FinishedRemote &f : finished) {
+        const RemoteTask &remote = f.task;
+        if (f.worked.completedAt <= 0 || existing.contains(remote.externalId) || seen.contains(remote.externalId)
+            || (!remote.url.isEmpty() && urls.contains(remote.url)))
+            continue;
+        seen.insert(remote.externalId);
+        const qint64 doneAt = std::min(f.worked.completedAt, now);
+        Task t;
+        t.id = newId();
+        t.title = remote.title.trimmed().isEmpty() ? QStringLiteral("(untitled)") : remote.title.trimmed();
+        t.description = remote.description;
+        t.priority = remote.priority;
+        t.dueDate = remote.dueDate;
+        t.tags = remote.tags;
+        t.categoryId = category ? category->id : QString();
+        t.status = TaskStatus::Completed;
+        parts.append(ops::createTask(t, doneAt));
+        const Scope history{QStringLiteral("task_history"), QStringLiteral("task_id = ?"), {t.id}};
+        parts.append(raw({history}, QStringLiteral("INSERT INTO task_history (id, task_id, action, at, details) VALUES (?, ?, 'completed', ?, ?)"),
+                         {newId(), t.id, doneAt, historyJson({{QStringLiteral("reason"), QStringLiteral("completed in %1").arg(service)}})}));
+        if (!remote.url.isEmpty()) {
+            parts.append(raw({{QStringLiteral("task_actions"), QStringLiteral("task_id = ?"), {t.id}}},
+                             QStringLiteral("INSERT INTO task_actions (id, task_id, kind, target, run_on, sort_order, created_at) "
+                                            "VALUES (?, ?, 'url', ?, 'manual', 0, ?)"),
+                             {newId(), t.id, remote.url, now}));
+        }
+        int length = 0;
+        parts.append(workedParts(t, {}, f.worked, service, now, &length));
+        ++count;
+        total += length;
     }
+    if (created)
+        *created = count;
     if (minutes)
-        *minutes = length;
-    return combine(QStringLiteral("Log work on “%1”").arg(task->title), parts);
+        *minutes = total;
+    if (parts.isEmpty())
+        return std::nullopt;
+    return combine(QStringLiteral("Sync"), parts);
 }
 
 QList<PendingPush> pendingCompletions(const Queries &q, const QString &integrationId)

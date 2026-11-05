@@ -1377,16 +1377,47 @@ private slots:
         // Done here: the next sync tells Linear (look up states, then update).
         QVERIFY(m_app->setTaskStatus(taskId, "completed"));
         server.reply(200, page); // still open there
+        const QJsonObject nothingDone{{"data", QJsonObject{{"issues", QJsonObject{{"nodes", QJsonArray()}}}}}};
+        server.reply(200, nothingDone); // finished there since the last sync
         server.reply(200, {{"data", QJsonObject{{"issue", QJsonObject{
                                                               {"state", QJsonObject{{"type", "started"}}},
                                                               {"team", QJsonObject{{"states", QJsonObject{{"nodes", QJsonArray{
                                                                   QJsonObject{{"id", "s-done"}, {"type", "completed"}, {"position", 1}}}}}}}}}}}}});
         server.reply(200, {{"data", QJsonObject{{"issueUpdate", QJsonObject{{"success", true}}}}}});
         hub.syncNow();
-        QTRY_COMPARE(server.requests.size(), 5); // viewer, pull, pull, states, update
+        QTRY_COMPARE(server.requests.size(), 6); // viewer, pull, pull, done since, states, update
+        QVERIFY(server.requests.at(3).body.value("query").toString().contains("completedAt"));
         QCOMPARE(server.requests.last().body.value("variables").toObject().value("stateId").toString(), QStringLiteral("s-done"));
         QTRY_COMPARE(scalar(*m_db, "SELECT sync_status FROM synced_items").toString(), QStringLiteral("done_pushed"));
         QCOMPARE(m_app->taskDetail(taskId).value("status").toString(), QStringLiteral("completed"));
+
+        // Picked up and closed in Linear between syncs: comes in done, with its time.
+        const QString doneAt = QDateTime::fromMSecsSinceEpoch(m_app->now() - 600000, QTimeZone::UTC).toString(Qt::ISODateWithMs);
+        QJsonObject shipped = issue;
+        shipped.insert("state", QJsonObject{{"type", "completed"}});
+        shipped.insert("completedAt", doneAt);
+        QJsonObject hotfix = shipped;
+        hotfix.insert("id", "uuid-2");
+        hotfix.insert("title", "Hotfix");
+        hotfix.insert("url", "https://linear.app/a/issue/ENG-2");
+        const QJsonObject empty{{"data", QJsonObject{{"issues", QJsonObject{{"nodes", QJsonArray()}, {"pageInfo", QJsonObject{{"hasNextPage", false}}}}}}}};
+        server.reply(200, empty);
+        const auto nodes = [](const QJsonArray &list) {
+            return QJsonObject{{"data", QJsonObject{{"issues", QJsonObject{{"nodes", list}}}}}};
+        };
+        const QJsonObject check{{"id", "uuid-1"}, {"archivedAt", QJsonValue::Null}, {"completedAt", doneAt},
+                                {"state", QJsonObject{{"type", "completed"}}}, {"assignee", QJsonObject{{"isMe", true}}},
+                                {"team", QJsonObject{{"key", "ENG"}}}};
+        server.reply(200, nodes({check}));           // what became of the linked one
+        server.reply(200, nodes({shipped, hotfix})); // done since the last sync
+        finished.clear();
+        hub.syncNow();
+        QTRY_COMPARE(server.requests.size(), 9);
+        QTRY_VERIFY(!m_app->externalTasks("done", "Hotfix").isEmpty());
+        QCOMPARE(m_app->externalTasks("all", "Ship it").size(), 1); // not brought in twice
+        const QString hotfixId = m_app->externalTasks("done", "Hotfix").first().toMap().value("id").toString();
+        QCOMPARE(scalar(*m_db, "SELECT COUNT(*) FROM schedules WHERE completed = 1 AND task_id = '" + hotfixId + "'").toInt(), 1);
+        QCOMPARE(scalar(*m_db, "SELECT duration_minutes FROM work_logs WHERE task_id = '" + hotfixId + "'").toInt(), 30);
 
         hub.disconnectLinear();
         QVERIFY(!hub.state().value("linear").toMap().value("enabled").toBool());

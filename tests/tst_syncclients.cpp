@@ -236,6 +236,41 @@ private slots:
         QCOMPARE(worked.value("done").completedAt, QDateTime(QDate(2026, 11, 5), QTime(1, 40), QTimeZone::UTC).toMSecsSinceEpoch());
     }
 
+    void linearCompletedSince()
+    {
+        FakeServer server;
+        QNetworkAccessManager nam;
+        LinearClient client(&nam);
+        client.setEndpoint(server.url());
+        client.setApiKey("k");
+        const auto node = [](const char *id, const char *state) {
+            return QJsonObject{{"id", id}, {"title", id}, {"state", QJsonObject{{"type", state}}}, {"team", QJsonObject{{"key", "ENG"}}},
+                               {"url", QString("https://linear.app/x/issue/") + id}, {"startedAt", QJsonValue::Null},
+                               {"completedAt", "2026-11-05T02:00:00.000Z"}};
+        };
+        server.reply(200, {{"data", QJsonObject{{"issues", QJsonObject{{"nodes", QJsonArray{node("done", "completed"),
+                                                                                          node("reopened", "started")}}}}}}});
+        QList<FinishedRemote> got;
+        bool finished = false;
+        LinearFilter filter;
+        filter.teamKeys = {"ENG"};
+        const qint64 since = QDateTime(QDate(2026, 11, 5), QTime(1, 0), QTimeZone::UTC).toMSecsSinceEpoch();
+        client.completedSince(since, filter, [&](const QList<FinishedRemote> &done, const QString &error) {
+            QVERIFY(error.isEmpty());
+            got = done;
+            finished = true;
+        });
+        QTRY_VERIFY(finished);
+        QCOMPARE(got.size(), 1); // completed then reopened: not done
+        QCOMPARE(got.first().task.externalId, QStringLiteral("done"));
+        QCOMPARE(got.first().worked.startedAt, 0);
+        QCOMPARE(got.first().worked.completedAt, since + 3'600'000);
+        const QJsonObject sent = server.requests.last().body.value("variables").toObject().value("filter").toObject();
+        QCOMPARE(sent.value("completedAt").toObject().value("gt").toString(), QStringLiteral("2026-11-05T01:00:00.000Z"));
+        QVERIFY(!sent.contains("state")); // any state: done ones aren't in the usual list
+        QVERIFY(sent.contains("assignee") && sent.contains("team"));
+    }
+
     void linearCompletePicksFirstDoneState()
     {
         FakeServer server;

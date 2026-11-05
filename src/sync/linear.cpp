@@ -5,6 +5,7 @@
 #include <QJsonDocument>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QTimeZone>
 
 namespace tumbler::sync {
 
@@ -27,6 +28,13 @@ QJsonObject issueFilter(const LinearFilter &f)
                       QJsonObject{{QStringLiteral("key"), QJsonObject{{QStringLiteral("in"), QJsonArray::fromStringList(f.teamKeys)}}}});
     }
     return filter;
+}
+
+// Linear's timestamps ("2026-11-05T01:40:00.000Z"); 0 when absent.
+qint64 msOf(const QJsonValue &v)
+{
+    const QDateTime t = QDateTime::fromString(v.toString(), Qt::ISODateWithMs);
+    return t.isValid() ? t.toMSecsSinceEpoch() : 0;
 }
 
 } // namespace
@@ -162,10 +170,6 @@ void LinearClient::whatBecameOf(const QStringList &ids, const LinearFilter &filt
                   done(gone, worked, error);
                   return;
               }
-              const auto ms = [](const QJsonValue &v) {
-                  const QDateTime t = QDateTime::fromString(v.toString(), Qt::ISODateWithMs);
-                  return t.isValid() ? t.toMSecsSinceEpoch() : qint64(0);
-              };
               for (const QString &id : batch)
                   gone.insert(id, Gone::Cancelled); // not returned at all: deleted
               for (const QJsonValue &v : data.value(QLatin1String("issues")).toObject().value(QLatin1String("nodes")).toArray()) {
@@ -176,7 +180,7 @@ void LinearClient::whatBecameOf(const QStringList &ids, const LinearFilter &filt
                   const QString team = n.value(QLatin1String("team")).toObject().value(QLatin1String("key")).toString();
                   if (state == QLatin1String("completed")) {
                       gone.insert(id, Gone::Completed);
-                      worked.insert(id, {ms(n.value(QLatin1String("startedAt"))), ms(n.value(QLatin1String("completedAt")))});
+                      worked.insert(id, {msOf(n.value(QLatin1String("startedAt"))), msOf(n.value(QLatin1String("completedAt")))});
                   }
                   else if (state == QLatin1String("canceled") || !n.value(QLatin1String("archivedAt")).isNull())
                       gone.insert(id, Gone::Cancelled);
@@ -186,6 +190,30 @@ void LinearClient::whatBecameOf(const QStringList &ids, const LinearFilter &filt
                       gone.insert(id, Gone::Unknown); // still matches; it was past the limit
               }
               done(gone, worked, {});
+          });
+}
+
+void LinearClient::completedSince(qint64 since, const LinearFilter &filter,
+                                  std::function<void(const QList<FinishedRemote> &, const QString &)> done)
+{
+    QJsonObject f = issueFilter(filter);
+    f.remove(QStringLiteral("state"));
+    f.insert(QStringLiteral("completedAt"),
+             QJsonObject{{QStringLiteral("gt"), QDateTime::fromMSecsSinceEpoch(since, QTimeZone::UTC).toString(Qt::ISODateWithMs)}});
+    query(QStringLiteral("query Done($filter: IssueFilter) { issues(filter: $filter, first: 100, orderBy: updatedAt) "
+                         "{ nodes { %1 startedAt completedAt } } }")
+              .arg(kIssueFields),
+          {{QStringLiteral("filter"), f}}, [done](const QJsonObject &data, const QString &error, bool) {
+              QList<FinishedRemote> out;
+              if (error.isEmpty()) {
+                  for (const QJsonValue &v : data.value(QLatin1String("issues")).toObject().value(QLatin1String("nodes")).toArray()) {
+                      const QJsonObject n = v.toObject();
+                      if (n.value(QLatin1String("state")).toObject().value(QLatin1String("type")).toString() != QLatin1String("completed"))
+                          continue; // reopened since
+                      out.append({toTask(n), {msOf(n.value(QLatin1String("startedAt"))), msOf(n.value(QLatin1String("completedAt")))}});
+                  }
+              }
+              done(out, error);
           });
 }
 

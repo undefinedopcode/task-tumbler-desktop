@@ -75,6 +75,10 @@ private:
     void withLinearKey(std::function<void()> then);
     void syncLinear(std::function<void()> done);
     void pushCompletions();
+    // One Linear pull as one change: open issues, what became of the rest,
+    // and ones finished there that never came in.
+    void pullLinear(const QString &integrationId, const QList<sync::RemoteTask> &issues, const QHash<QString, sync::Gone> &gone,
+                    const QHash<QString, sync::Worked> &worked, const QList<sync::FinishedRemote> &finished, qint64 nextSince);
     void pushNext(const QString &integrationId, QList<sync::PendingPush> pending);
     void syncFeed(const sync::FeedSettings &feed, const QByteArray &data, QString *error);
     // A device: feed reads the computer's calendar; others are fetched.

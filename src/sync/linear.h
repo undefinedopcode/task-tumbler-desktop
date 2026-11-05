@@ -41,6 +41,9 @@ public:
     // yours now, and for the done ones, when they were started and completed.
     void whatBecameOf(const QStringList &ids, const LinearFilter &filter,
                       std::function<void(const QHash<QString, Gone> &gone, const QHash<QString, Worked> &worked, const QString &error)> done);
+    // Your issues completed after `since` (UTC ms), newest first, up to 100.
+    void completedSince(qint64 since, const LinearFilter &filter,
+                        std::function<void(const QList<FinishedRemote> &done, const QString &error)> done);
     // Moves the issue to its team's first "completed" state.
     void complete(const QString &id, std::function<void(const QString &error)> done);
 

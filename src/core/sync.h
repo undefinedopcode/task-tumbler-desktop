@@ -74,6 +74,19 @@ struct Worked {
 std::optional<Mutation> logWorkedThere(const Queries &q, const QString &taskId, const Worked &worked, const QString &service,
                                        const QTimeZone &zone, qint64 now, int *minutes = nullptr);
 
+struct FinishedRemote {
+    RemoteTask task;
+    Worked worked;
+};
+
+// Items finished there that never came in as tasks (picked up and closed
+// between two syncs): each becomes a finished task with its time logged, as
+// with logWorkedThere. Ones seen before are skipped: still linked (or
+// deleted here), or a task already opens the same link. Nothing when there's
+// nothing new.
+std::optional<Mutation> pullFinished(const Queries &q, const QString &integrationId, const QList<FinishedRemote> &finished,
+                                     const QString &service, qint64 now, int *created = nullptr, int *minutes = nullptr);
+
 // The integration row for a provider, created if missing. Not undoable.
 std::optional<QString> ensureIntegration(QSqlDatabase db, const QString &provider, qint64 now, QString *error = nullptr);
 
